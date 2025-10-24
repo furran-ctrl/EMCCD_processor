@@ -38,7 +38,6 @@ def TiffLoaderBatch(directory: str) -> List[np.ndarray]:
     file_paths = []
     for ext in ['*.tiff', '*.tif']:
         file_paths.extend(dir_path.glob(ext))
-        file_paths.extend(dir_path.glob(ext.upper()))  # Handle uppercase extensions
     if not file_paths:
         raise FileNotFoundError(f"No TIFF files found in {directory}")
     print(f"Found {len(file_paths)} TIFF files")

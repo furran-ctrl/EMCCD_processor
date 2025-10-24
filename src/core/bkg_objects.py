@@ -52,7 +52,8 @@ class CrudeBackground:
         image_stack = np.array(images)
         # Compute median along the stack axis (axis=0)
         self.processed_bkg = np.median(image_stack, axis=0)
-        
+        #self.processed_bkg = np.median(image_stack, axis=0)-np.mean(image_stack, axis=0)
+        #print('Using!')
         print(f"Computed crude median background - Shape: {self.processed_bkg.shape}, ")
         
         return self.processed_bkg
