@@ -7,6 +7,9 @@ from pathlib import Path
 #automatically handles path separators across different operating systems.
 
 def TiffLoader(directory: str, filename: str) -> np.ndarray:
+    '''
+    filename must include .tiff suffix!!!
+    '''
     # Convert to Path object
     dir_path = Path(directory)
     # Construct full file path
@@ -20,6 +23,9 @@ def TiffLoader(directory: str, filename: str) -> np.ndarray:
         print(f"Error loading {file_path}: {e}")
 
 def TiffLoaderBatch(directory: str) -> List[np.ndarray]:
+    '''
+    Loads all tiff under a /dir and returns a list of ndarray
+    '''
     # Convert to Path object for better handling
     dir_path = Path(directory)
 
