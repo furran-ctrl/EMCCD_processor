@@ -62,7 +62,7 @@ def fit_circular_gaussian_ring(data: np.ndarray,
     
     # Create ring mask for fitting region
     r2_from_center = (x_coords - x_guess)**2 + (y_coords - y_guess)**2
-    ring_mask = (r2_from_center >= inner_radius**2) & (r2_from_radius <= outer_radius**2)
+    ring_mask = (r2_from_center >= inner_radius**2) & (r2_from_center <= outer_radius**2)
     
     # Extract data points within ring
     x_fit = x_coords[ring_mask]
@@ -72,19 +72,19 @@ def fit_circular_gaussian_ring(data: np.ndarray,
     # Define parameter bounds based on expected deviations
     # amplitude: ±30%, center: ±30 pixels, sigma: ±20%, offset: ±50
     lower_bounds = [
-        amp_guess * 0.7,           # amplitude -30%
+        amp_guess * 0.2,           # amplitude 20%
         x_guess - 30,              # x_center -30 pixels
         y_guess - 30,              # y_center -30 pixels  
-        sigma_guess * 0.8,         # sigma -20%
-        offset_guess - 50          # offset -50
+        sigma_guess * 0.2,         # sigma 20%
+        offset_guess - 20          # offset -20
     ]
     
     upper_bounds = [
-        amp_guess * 1.3,           # amplitude +30%
+        amp_guess * 5,           # amplitude +400%
         x_guess + 30,              # x_center +30 pixels
         y_guess + 30,              # y_center +30 pixels
-        sigma_guess * 1.2,         # sigma +20%
-        offset_guess + 50          # offset +50
+        sigma_guess * 5,         # sigma +400%
+        offset_guess + 20          # offset +20
     ]
     
     # Ensure bounds are within physical limits
@@ -93,7 +93,7 @@ def fit_circular_gaussian_ring(data: np.ndarray,
     upper_bounds[1] = min(data.shape[1], upper_bounds[1])  # x_center max
     upper_bounds[2] = min(data.shape[0], upper_bounds[2])  # y_center max
     lower_bounds[3] = max(1, lower_bounds[3])  # sigma min
-    lower_bounds[4] = max(0, lower_bounds[4])  # offset min
+    #lower_bounds[4] = max(0, lower_bounds[4])  # offset min
     
     bounds = (lower_bounds, upper_bounds)
     

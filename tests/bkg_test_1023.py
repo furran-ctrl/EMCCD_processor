@@ -42,5 +42,5 @@ plot_background(CrudeBkg)
 
 from src.io.result_save import save_as_tiff
 
-result_dir = r"C:\Users\86177\Desktop\Diffraction_code\Temp_savespace"
+result_dir = r"C:\Users\86177\Desktop\Diffraction_code\Temp_savespace\calc_bkg"
 save_as_tiff(CrudeBkg,result_dir)

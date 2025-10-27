@@ -10,24 +10,31 @@ sys.path.insert(0, project_root)
 from src.core.tiff_objects import EMCCDimage
 from src.io.tiff_import import TiffLoader
 from src.io.quick_plot import plot_ndarray
-from src.core.bkg_objects import CrudeBackground
+#from src.core.bkg_objects import CrudeBackground
 
+r'''
 bkgdata = TiffLoader(r'C:\Users\86177\Desktop\Diffraction_code\Temp_savespace',r'Temp_savespace.tiff')
 if bkgdata is None:
     print('Wrong Datatype!!')
 Bkgtestdir = r"C:\Users\86177\Desktop\test_file\bkg_100"
 BkgTest = CrudeBackground(Bkgtestdir)
 CrudeBkg = BkgTest.get_processed_background()
+'''
+bkgdata = TiffLoader(r'C:\Users\86177\Desktop\Diffraction_code\Temp_savespace',r'calc_bkg.tiff')
 
 data_filepath = r"C:\Users\86177\Desktop\test_file\test_signal_600"
-data_filename = r"AndorEMCCD-15_xps189.067500_scan1_labtime22-54-20p450926.tiff"
+data_filename = r"AndorEMCCD-5_xps188.975000_scan1_labtime22-54-14p065387.tiff"
 tiffdata = EMCCDimage(TiffLoader(data_filepath,data_filename))
-
-tiffdata.remove_background(CrudeBkg)
-
+print(r'loaded')
+tiffdata.remove_background(bkgdata)
+print(r"calced")
 #plot_ndarray(CrudeBkg,470,520)
 #plot_ndarray(bkgdata,470,520)
-plot_ndarray(tiffdata.get_processed_data(),20,200)
+plot_ndarray(tiffdata.get_processed_data(),20,300)
+
+from src.io.result_save import save_as_tiff
+result_dir = r"C:\Users\86177\Desktop\Diffraction_code\Temp_savespace\data_saved5"
+#save_as_tiff(tiffdata.get_processed_data(),result_dir)
 #X小Y大远离暗电流
 '''
 def detailed_corner_analysis(array: np.ndarray, corner_size: int = 50) -> Dict:
