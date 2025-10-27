@@ -1,4 +1,4 @@
-import tifffile as tiff
+import tifffile 
 import numpy as np
 import os
 
@@ -7,25 +7,54 @@ from pathlib import Path
 #automatically handles path separators across different operating systems.
 
 def TiffLoader(directory: str, filename: str) -> np.ndarray:
-    '''
-    filename must include .tiff suffix!!!
-    '''
-    # Convert to Path object
-    dir_path = Path(directory)
+    """
+    Load a TIFF file from the specified directory and return as numpy ndarray.
+    
+    Parameters:
+    -----------
+    directory : str
+        Path to the directory containing the TIFF file
+    filename : str
+        Name of the TIFF file (with or without extension)
+    
+    Returns:
+    --------
+    np.ndarray
+        The loaded TIFF image as a numpy array
+    """
+    # Ensure the filename has .tiff or .tif extension
+    if not filename.lower().endswith(('.tiff', '.tif')):
+        # Try adding extensions if not present
+        for ext in ['.tiff', '.tif']:
+            potential_path = os.path.join(directory, filename + ext)
+            if os.path.exists(potential_path):
+                filename = filename + ext
+                break
+        else:
+            # If no file found with extensions, use the original filename
+            pass
+    
     # Construct full file path
-    file_path = dir_path / filename
+    dir_path = Path(directory)
+    file_path = os.path.join(dir_path, filename)
+    
     # Load and return the TIFF file
-    try:
-        # Load the TIFF file
-        image = tiff.imread(file_path)
-        return image
-    except Exception as e:
-        print(f"Error loading {file_path}: {e}")
+    return tifffile.imread(file_path)
 
 def TiffLoaderBatch(directory: str) -> List[np.ndarray]:
-    '''
-    Loads all tiff under a /dir and returns a list of ndarray
-    '''
+    """
+    Load all TIFF files from the specified directory and return as list of numpy ndarrays.
+    
+    Parameters:
+    -----------
+    directory : str
+        Path to the directory containing TIFF files
+    
+    Returns:
+    --------
+    List[np.ndarray]
+        List of loaded TIFF images as numpy arrays
+    """
     # Convert to Path object for better handling
     dir_path = Path(directory)
 
@@ -46,7 +75,7 @@ def TiffLoaderBatch(directory: str) -> List[np.ndarray]:
     image_list = []
     for file_path in file_paths:
         try:
-            image = tiff.imread(file_path)
+            image = tifffile.imread(file_path)
             image_list.append(image)
         except Exception as e:
             print(f"Error loading {file_path}: {e}")

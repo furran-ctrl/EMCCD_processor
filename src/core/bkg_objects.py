@@ -1,7 +1,8 @@
 import numpy as np
 from typing import List
 from pathlib import Path
-from src.io.tiff_import import TiffLoaderBatch  # Import your TiffLoaderBatch function
+
+from src.io.tiff_import import TiffLoaderBatch 
 
 class CrudeBackground:
     #processing background images by computing median pixel values across multiple TIFF images

@@ -22,7 +22,8 @@ def plot_azimuthal_average(data,
         try:
             import matplotlib.pyplot as plt
             
-            radii, intensities = data.azimuthal_average(radius, num_bins)
+            with timer('averaging'):
+                radii, intensities = data.azimuthal_average(radius, num_bins)
             
             plt.figure(figsize=(10, 6))
             plt.plot(radii, intensities, 'b-', linewidth=2, label='Azimuthal Average')
@@ -39,4 +40,7 @@ def plot_azimuthal_average(data,
             print("Matplotlib not available for plotting")
 
 processed.iterative_ring_centroid([720,350])
-plot_azimuthal_average(processed)
+
+from src.utils.timer import timer
+with timer('azimuthal'):
+    plot_azimuthal_average(processed)

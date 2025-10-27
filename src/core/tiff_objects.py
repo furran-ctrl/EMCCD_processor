@@ -75,9 +75,9 @@ class EMCCDimage:
         if self.processed_data is None:
             raise ValueError("Call remove_background() first")
     
-        print(f"Fitting circular Gaussian to ring region {inner_radius}-{outer_radius} pixels")
+        '''print(f"Fitting circular Gaussian to ring region {inner_radius}-{outer_radius} pixels")
         print(f"Initial guess: A={initial_guess[0]:.1f}, center=({initial_guess[1]:.1f}, {initial_guess[2]:.1f}), "
-            f"σ={initial_guess[3]:.1f}, offset={initial_guess[4]:.1f}")
+            f"σ={initial_guess[3]:.1f}, offset={initial_guess[4]:.1f}")'''
     
         # Perform fitting
         fit_result = fit_circular_gaussian_ring(
@@ -85,16 +85,28 @@ class EMCCDimage:
         )
     
         if fit_result['success']:
-            self.fit_result = fit_result
-            self.diffraction_center = (fit_result['x_center'], fit_result['y_center'])
-        
-            print(f"Fitting successful!")
+            #self.fit_result = fit_result
+            #self.diffraction_center = (fit_result['x_center'], fit_result['y_center'])
+            self.center_pos = (fit_result['x_center'], fit_result['y_center'])
+
+            '''print(f"Fitting successful!")
             print(f"Diffraction center: ({fit_result['x_center']:.2f} ± {fit_result['x_center_err']:.2f}, "
               f"{fit_result['y_center']:.2f} ± {fit_result['y_center_err']:.2f})")
             print(f"Gaussian width: {fit_result['sigma']:.2f} ± {fit_result['sigma_err']:.2f} pixels")
-            print(f"Amp,offset: {fit_result['amplitude']:.2f} , {fit_result['offset']:.2f} pixels")
+            print(f"Amp,offset: {fit_result['amplitude']:.2f} , {fit_result['offset']:.2f} pixels")'''
+
+            y_coords, x_coords = np.mgrid[0:self.processed_data.shape[0], 0:self.processed_data.shape[1]]
         
-            return self.diffraction_center
+            # Create ring mask
+            distances = np.sqrt((x_coords - initial_guess[1])**2 + (y_coords - initial_guess[2])**2)
+            ring_mask = (distances >= inner_radius) & (distances <= outer_radius)
+            
+            # Extract ring region
+            ring_data = self.processed_data[ring_mask]
+        
+            # Calculate total intensity
+            self.total_intensity = np.sum(ring_data)
+            return self.center_pos
         else:
             print("Fitting failed")
             return None
@@ -129,13 +141,31 @@ class EMCCDimage:
         if save_total_count:
             self.total_count = total_intensity
         return x_center, y_center
-    # Pre-compute the ring mask for fitting 
+ 
     def iterative_ring_centroid(self,
                            initial_guess: Tuple[float, float],
                            max_iter: int = 10,
                            tolerance: float = 1.0) -> Tuple[float, float]:
         """
-        Iteratively refine center using ring centroid method
+        Iteratively refine center coordinates using ring centroid method.
+        
+        This method performs multiple iterations of ring centroid calculation,
+        using the result from each iteration as the center for the next ring.
+        The process continues until convergence or maximum iterations reached.
+        
+        Args:
+            initial_guess: Initial center coordinates as (x, y) tuple in pixels.
+            max_iter: Maximum number of iterations to perform. Defaults to 10.
+            tolerance: Convergence tolerance in pixels. Iteration stops when center 
+                      shift is less than this value. Defaults to 1.0.
+        
+        Returns:
+            Final refined center coordinates as (x, y) tuple.
+
+        Note:
+            The ring centroid method calculates the intensity-weighted center of mass
+            within a ring region around the current center estimate. This iterative
+            approach helps converge to the true diffraction pattern center.
         """
         current_center = initial_guess
         
@@ -145,8 +175,7 @@ class EMCCDimage:
             # Check convergence
             shift_distance = np.sqrt((new_center[0] - current_center[0])**2 + 
                                     (new_center[1] - current_center[1])**2)
-            print(f"Iteration {iteration+1}: Center shift = {shift_distance:.3f} pixels")
-            #print(new_center,current_center)
+            #print(f"Iteration {iteration+1}: Center shift = {shift_distance:.3f} pixels")
 
             current_center = new_center
             if shift_distance < tolerance:
