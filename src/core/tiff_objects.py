@@ -19,6 +19,8 @@ class EMCCDimage:
         """
         self.raw_data = raw_data
         self.processed_data: Optional[np.ndarray] = None
+        self.center_pos: Optional[Tuple] = None
+        self.total_count: Optional[float] = None
     
     def remove_background(self, background: np.ndarray) -> None:
         """
@@ -100,7 +102,8 @@ class EMCCDimage:
     def ring_centroid(self,
                   center_guess: Tuple[float, float],
                   inner_radius: float = 40,
-                  outer_radius: float = 200) -> Tuple[float, float]:
+                  outer_radius: float = 200,
+                  save_total_count: bool = False) -> Tuple[float, float]:
         """
         Calculate centroid within ring region
         """
@@ -123,12 +126,14 @@ class EMCCDimage:
         else:
             x_center, y_center = center_guess
         
+        if save_total_count:
+            self.total_count = total_intensity
         return x_center, y_center
-    
+    # Pre-compute the ring mask for fitting 
     def iterative_ring_centroid(self,
                            initial_guess: Tuple[float, float],
                            max_iter: int = 10,
-                           tolerance: float = 0.5) -> Tuple[float, float]:
+                           tolerance: float = 1.0) -> Tuple[float, float]:
         """
         Iteratively refine center using ring centroid method
         """
@@ -147,4 +152,60 @@ class EMCCDimage:
             if shift_distance < tolerance:
                 break
         
-        return current_center
+        self.center_pos = self.ring_centroid(current_center,save_total_count=True)
+        return self.center_pos
+    
+    def azimuthal_average(self, 
+                         radius: float = 300,
+                         num_bins: int = 300) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Calculate azimuthal average of the processed data around the center position.
+        
+        Parameters:
+        -----------
+        radius : float
+            Maximum radius for azimuthal average (default: 300 pixels)
+        num_bins : int
+            Number of radial bins for the average
+        
+        Returns:
+        --------
+        tuple : (radial_positions, average_intensities)
+            radial_positions : np.ndarray - Radial coordinates (pixels)
+            average_intensities : np.ndarray - Azimuthally averaged intensities
+        
+        Raises:
+        -------
+        ValueError: If processed_data or center_pos is not set
+        """
+        if self.processed_data is None:
+            raise ValueError("Processed data not available. Call remove_background() first.")
+        
+        if self.center_pos is None:
+            raise ValueError("Center position not set. Call find_diffraction_center() first.")
+        
+        # Create coordinate grid
+        y_coords, x_coords = np.mgrid[0:self.processed_data.shape[0], 0:self.processed_data.shape[1]]
+        
+        # Calculate distances from center
+        center_x, center_y = self.center_pos
+        distances = np.sqrt((x_coords - center_x)**2 + (y_coords - center_y)**2)
+        
+        # Create radial bins
+        bin_edges = np.linspace(0, radius, num_bins + 1)
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        
+        # Initialize arrays for results
+        radial_average = np.zeros(num_bins)
+        pixel_counts = np.zeros(num_bins)
+        
+        # Calculate azimuthal average
+        for i in range(num_bins):
+            # Create mask for current radial bin
+            mask = (distances >= bin_edges[i]) & (distances < bin_edges[i+1])
+            
+            if np.any(mask):
+                radial_average[i] = np.mean(self.processed_data[mask])
+                pixel_counts[i] = np.sum(mask)
+        
+        return bin_centers, radial_average

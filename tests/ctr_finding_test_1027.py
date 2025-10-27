@@ -37,3 +37,33 @@ with timer('centroid'):
 
 with timer('i_centroid'):
     print(processed.iterative_ring_centroid([740,370]))
+
+def test_func_for_annotation(data: np.ndarray, 
+                     center: Tuple[float, float],
+                     radius: float = 300,
+                     num_bins: int = 300) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Calculate azimuthal average of 2D array around specified center.
+    
+    Args:
+        data: Input 2D numpy array (1024, 1024)
+        center: Center coordinates as (x, y) tuple
+        radius: Maximum radius for averaging in pixels. Defaults to 300.
+        num_bins: Number of radial bins. Defaults to 300.
+    
+    Returns:
+        tuple: Contains two arrays:
+            - radial_positions: Bin center coordinates (num_bins,)
+            - average_intensities: Azimuthally averaged intensities (num_bins,)
+    
+    Raises:
+        ValueError: If data is not 2D array or center is outside bounds
+        TypeError: If input types are incorrect
+    
+    Example:
+        >>> data = np.random.rand(1024, 1024)
+        >>> center = (512, 512)
+        >>> radii, intensities = azimuthal_average(data, center)
+        >>> print(f"Peak at radius: {radii[np.argmax(intensities)]}")
+    """
+    return
