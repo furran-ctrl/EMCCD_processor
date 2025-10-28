@@ -97,9 +97,11 @@ class BatchXPSProcessor:
                 )
                 
                 # Process the group with verbose output
-                group_result = processor.process_xps_group(verbose=True)
-                self.processed_results.append(group_result)
-                
+                #group_result = processor.process_xps_group(verbose=True)
+                #self.processed_results.append(group_result)
+                processor.process_xps_group(verbose=True)
+                processor.save_to_csv(r'C:\Users\86177\Desktop\Diffraction_code\Temp_result_dir')
+
                 print(f"✓ Successfully processed XPS group {xps_value:.5f}")
                 
             except Exception as e:

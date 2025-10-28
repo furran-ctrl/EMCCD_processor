@@ -9,15 +9,15 @@ from scripts.XPSBatch_Process import BatchXPSProcessor
 
 # Example usage
 batch_processor = BatchXPSProcessor(
-    data_directory="/path/to/tiff/files",
-    bkg_directory="/path/to/background",
-    bkg_filename="background.tiff",
+    data_directory=r"E:\20250808\8_water_IR72deg_longscan5\fist_AndorEMCCD",
+    bkg_directory=r"C:\Users\86177\Desktop\Diffraction_code\Temp_savespace",
+    bkg_filename="calc_bkg.tiff",
     initial_center_guess=(720, 350)
 )
 
 # Organize files into XPS groups
-batch_processor.organize_files_into_groups(threshold=350, tolerance=0.002)
-
+batch_processor.organize_files_into_groups(threshold=20, tolerance=0.002)
+print('organized')
 # Process first 2 groups for testing
 results = batch_processor.process_groups_sequential(process_first_n=2)
 

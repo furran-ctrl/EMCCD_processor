@@ -122,7 +122,7 @@ class XPSGroupProcessor:
         successful_files = 0
         
         for i, filepath in enumerate(self.file_list):
-            if verbose and i % 50 == 0:
+            if verbose and i % 5 == 0:
                 print(f"Progress: {i}/{len(self.file_list)} files processed")
             
             result = self.process_single_file(filepath)
