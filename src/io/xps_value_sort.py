@@ -315,7 +315,7 @@ if __name__ == "__main__":
     # Example 2: Grouping with XPS values
     try:
         groups_with_xps = group_tiff_files_with_info(r"E:\20250808\8_water_IR72deg_longscan6\fist_AndorEMCCD")
-        print_detailed_summary(groups_with_xps)
+        #print_detailed_summary(groups_with_xps)
         
         # Access both XPS value and files
         for xps_value, files in groups_with_xps:
@@ -326,7 +326,7 @@ if __name__ == "__main__":
 
     try:
         merged_groups = merge_xps_groups_strategy(groups_with_xps, tolerance = 0.002)
-        print_detailed_summary(merged_groups)
+        #print_detailed_summary(merged_groups)
         
         # Access both XPS value and files
         for xps_value, files in merged_groups:
