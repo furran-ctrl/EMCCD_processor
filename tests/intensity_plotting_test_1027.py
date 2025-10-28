@@ -10,7 +10,7 @@ sys.path.insert(0, project_root)
 from src.core.tiff_objects import EMCCDimage
 from src.io.tiff_import import TiffLoader
 
-processed = EMCCDimage(TiffLoader(r'C:\Users\86177\Desktop\Diffraction_code\Temp_savespace',r'data_saved2.tiff'))
+processed = EMCCDimage(TiffLoader(r'C:\Users\86177\Desktop\Diffraction_code\Temp_savespace',r'data_saved3.tiff'))
 processed.copy_as_processed()
 
 def plot_azimuthal_average(data, 
@@ -39,8 +39,12 @@ def plot_azimuthal_average(data,
         except ImportError:
             print("Matplotlib not available for plotting")
 
-processed.iterative_ring_centroid([720,350])
-
 from src.utils.timer import timer
-with timer('azimuthal'):
-    plot_azimuthal_average(processed)
+
+with timer('total'):
+    processed.iterative_ring_centroid([720,350])
+    processed.azimuthal_average()
+#~1.0sec
+
+#with timer('azimuthal'):
+#    plot_azimuthal_average(processed)
