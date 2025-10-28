@@ -325,7 +325,7 @@ if __name__ == "__main__":
         print(f"Error: {e}")
 
     try:
-        merged_groups = merge_xps_groups_strategy(groups_with_xps, tolerance = 0.002)
+        merged_groups = merge_xps_groups_strategy(groups_with_xps, threshold = 350, tolerance = 0.002)
         #print_detailed_summary(merged_groups)
         
         # Access both XPS value and files
