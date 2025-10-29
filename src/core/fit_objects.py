@@ -6,6 +6,8 @@ import csv
 from src.core.tiff_objects import EMCCDimage
 from src.io.tiff_import import TiffLoader
 from src.core.reslut_class import ProcessedResult, XPSGroupResult
+from src.utils.timer import timer
+from src.core.mask_class import RadialMasks, precompute_radial_masks, RingMask, precompute_ring_mask
 
 class XPSGroupProcessor:
     """
@@ -58,7 +60,7 @@ class XPSGroupProcessor:
             print(f"Error loading background: {e}")
             raise
     
-    def process_single_file(self, filepath: str) -> Optional[ProcessedResult]:
+    def process_single_file(self, filepath: str, ring_mask: RingMask, radial_masks: RadialMasks) -> Optional[ProcessedResult]:
         """
         Process a single TIFF file.
         
@@ -74,6 +76,7 @@ class XPSGroupProcessor:
             3. Find diffraction center using iterative ring centroid
             4. Calculate azimuthal average radial profile
         """
+
         try:
             # Load image file
             image_file = EMCCDimage(TiffLoader(Path(filepath).parent, Path(filepath).name))
@@ -82,10 +85,10 @@ class XPSGroupProcessor:
             image_file.remove_background(self.bkg_image.get_processed_data())
             
             # Find diffraction center
-            center = image_file.iterative_ring_centroid(self.initial_center_guess)
+            center = image_file.iterative_ring_centroid(ring_mask, self.initial_center_guess)
             
             # Calculate azimuthal average
-            bin_centers, radial_average = image_file.azimuthal_average()
+            bin_centers, radial_average = image_file.azimuthal_average(radial_masks)
             
             return ProcessedResult(
                 center=center,
@@ -120,12 +123,16 @@ class XPSGroupProcessor:
         centers = []
         total_counts = []
         successful_files = 0
+
+        #pre-compute-radial-mask, ring-mask
+        radial_mask = precompute_radial_masks()
+        ring_mask = precompute_ring_mask()
         
         for i, filepath in enumerate(self.file_list):
-            if verbose and i % 5 == 0:
+            if verbose and i % 10 == 0:
                 print(f"Progress: {i}/{len(self.file_list)} files processed")
             
-            result = self.process_single_file(filepath)
+            result = self.process_single_file(filepath, ring_mask, radial_mask)
             if result is not None:
                 all_radial_profiles.append(result.radial_profile)
                 centers.append(result.center)
