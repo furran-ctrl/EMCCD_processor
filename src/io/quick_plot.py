@@ -18,7 +18,7 @@ def plot_ndarray(Bkg: np.ndarray,Vmin,Vmax):
     
     # Show the plot
     plt.tight_layout()
-    plt.show(block=False)
+    plt.show()
 
 def plot_azimuthal_average(data, 
                               radius: float = 300,

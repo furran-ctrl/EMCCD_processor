@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 from src.utils.gaussian_fitting import fit_circular_gaussian_ring
 from src.core.mask_class import RadialMasks, RingMask
@@ -23,6 +23,278 @@ class EMCCDimage:
         self.center_pos: Optional[Tuple] = None
         self.total_count: Optional[float] = None
     
+    def filter_xray_spots_inplace(self, 
+                                 chunk_size: int = 64,
+                                 sigma_threshold: float = 5.0,
+                                 beam_threshold: float = 5000) -> None:
+        """
+        Remove X-ray spots from raw data by local statistical filtering.
+        
+        X-ray spots appear as 4~10 pixel bright spots significantly brighter than
+        local background. This method divides the image into chunks and applies
+        statistical filtering to identify and remove outliers in place.
+        
+        Args:
+            chunk_size: Size of square chunks for local processing (default: 64)
+            sigma_threshold: Number of standard deviations above mean for outlier detection
+            beam_threshold: Intensity threshold to identify central beam regions
+            
+        Raises:
+            ValueError: If raw_data is not available
+            ValueError: If chunk_size is not a divisor of image dimensions
+        """
+        if self.raw_data is None:
+            raise ValueError("Raw data not available")
+        
+        height, width = self.raw_data.shape
+        
+        # Validate chunk_size
+        if height % chunk_size != 0 or width % chunk_size != 0:
+            raise ValueError(f"chunk_size {chunk_size} must divide both image dimensions {height}x{width}")
+        
+        # Convert to float for NaN support if not already
+        if not np.issubdtype(self.raw_data.dtype, np.floating):
+            self.raw_data = self.raw_data.astype(float)
+        
+        # Process each chunk
+        for row_start in range(0, height, chunk_size):
+            for col_start in range(0, width, chunk_size):
+                row_end = row_start + chunk_size
+                col_end = col_start + chunk_size
+                
+                # Extract current chunk
+                chunk = self.raw_data[row_start:row_end, col_start:col_end]
+                
+                # Calculate chunk statistics
+                chunk_mean = np.mean(chunk)
+                chunk_std = np.std(chunk)
+                
+                # Skip processing if chunk contains central beam (high average intensity)
+                if chunk_mean > beam_threshold:
+                    continue
+                
+                # Calculate outlier threshold
+                outlier_threshold = chunk_mean + sigma_threshold * chunk_std
+                
+                # Find pixels exceeding threshold and replace with NaN in place
+                outlier_mask = chunk > outlier_threshold
+                if np.any(outlier_mask):
+                    self.raw_data[row_start:row_end, col_start:col_end][outlier_mask] = np.nan
+
+    def filter_xray_spots(self, 
+                         chunk_size: int = 64,
+                         sigma_threshold: float = 5.0,
+                         beam_threshold: float = 5000) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
+        """
+        Remove X-ray spots from raw data by local statistical filtering.
+        
+        X-ray spots appear as 4~10 pixel bright spots significantly brighter than
+        local background. This method divides the image into chunks and applies
+        statistical filtering to identify and remove outliers.
+        
+        Args:
+            chunk_size: Size of square chunks for local processing (default: 64)
+            sigma_threshold: Number of standard deviations above mean for outlier detection
+            beam_threshold: Intensity threshold to identify central beam regions
+            
+        Returns:
+            tuple: Contains two elements:
+                - processed_data: X-ray filtered numpy array (NaN for removed pixels)
+                - removed_positions: List of (row, col) coordinates of removed pixels
+                
+        Raises:
+            ValueError: If raw_data is not available
+            ValueError: If chunk_size is not a divisor of image dimensions
+            
+        Example:
+            >>> filtered_data, removed_pixels = image.filter_xray_spots()
+            >>> print(f"Removed {len(removed_pixels)} X-ray affected pixels")
+        """
+        if self.raw_data is None:
+            raise ValueError("Raw data not available")
+        
+        height, width = self.raw_data.shape
+        
+        # Validate chunk_size
+        if height % chunk_size != 0 or width % chunk_size != 0:
+            raise ValueError(f"chunk_size {chunk_size} must divide both image dimensions {height}x{width}")
+        
+        # Create copy of raw data for processing
+        processed_data = self.raw_data.copy().astype(float)
+        removed_positions = []
+        
+        print(f"Filtering X-ray spots: {height}x{width} image, {chunk_size}x{chunk_size} chunks")
+        print(f"Threshold: {sigma_threshold}σ above local mean, beam threshold: {beam_threshold}")
+        
+        # Process each chunk
+        chunks_processed = 0
+        chunks_with_beam = 0
+        total_pixels_removed = 0
+        
+        for row_start in range(0, height, chunk_size):
+            for col_start in range(0, width, chunk_size):
+                row_end = row_start + chunk_size
+                col_end = col_start + chunk_size
+                
+                # Extract current chunk
+                chunk = self.raw_data[row_start:row_end, col_start:col_end]
+                
+                # Calculate chunk statistics
+                chunk_mean = np.mean(chunk)
+                chunk_std = np.std(chunk)
+                
+                # Skip processing if chunk contains central beam (high average intensity)
+                if chunk_mean > beam_threshold:
+                    chunks_with_beam += 1
+                    continue
+                
+                # Calculate outlier threshold
+                outlier_threshold = chunk_mean + sigma_threshold * chunk_std
+                
+                # Find pixels exceeding threshold
+                outlier_mask = chunk > outlier_threshold
+                outlier_positions = np.where(outlier_mask)
+                
+                if np.any(outlier_mask):
+                    # Convert local chunk coordinates to global image coordinates
+                    global_rows = outlier_positions[0] + row_start
+                    global_cols = outlier_positions[1] + col_start
+                    
+                    # Record removed positions
+                    for global_row, global_col in zip(global_rows, global_cols):
+                        removed_positions.append((int(global_row), int(global_col)))
+                    
+                    # Replace outliers with NaN in processed data
+                    processed_data[global_rows, global_cols] = np.nan
+                    total_pixels_removed += len(global_rows)
+                
+                chunks_processed += 1
+        
+        # Print processing summary
+        self._print_filtering_summary(chunks_processed, chunks_with_beam, total_pixels_removed, removed_positions)
+        
+        return processed_data, removed_positions
+    
+    def _print_filtering_summary(self, 
+                               chunks_processed: int,
+                               chunks_with_beam: int,
+                               total_pixels_removed: int,
+                               removed_positions: List[Tuple[int, int]]) -> None:
+        """
+        Print detailed summary of X-ray filtering results.
+        
+        Args:
+            chunks_processed: Number of chunks processed for X-ray filtering
+            chunks_with_beam: Number of chunks skipped due to beam presence
+            total_pixels_removed: Total number of pixels removed
+            removed_positions: List of removed pixel coordinates
+        """
+        print("\n" + "="*50)
+        print("X-RAY FILTERING SUMMARY")
+        print("="*50)
+        print(f"Chunks processed: {chunks_processed}")
+        print(f"Chunks with beam (skipped): {chunks_with_beam}")
+        print(f"Total pixels removed: {total_pixels_removed}")
+        print(f"Removal rate: {total_pixels_removed / (1024*1024) * 100:.4f}%")
+        
+        if removed_positions:
+            print(f"\nFirst 10 removed pixel positions (row, col):")
+            for i, (row, col) in enumerate(removed_positions[:10]):
+                intensity = self.raw_data[row, col]
+                print(f"  ({row:4d}, {col:4d}) - Intensity: {intensity:8.1f}")
+            
+            if len(removed_positions) > 10:
+                print(f"  ... and {len(removed_positions) - 10} more positions")
+            
+            # Calculate spatial distribution
+            rows, cols = zip(*removed_positions)
+            print(f"\nSpatial distribution:")
+            print(f"  Row range: {min(rows)} - {max(rows)}")
+            print(f"  Col range: {min(cols)} - {max(cols)}")
+            
+            # Check for clusters (potential multi-pixel X-ray events)
+            self._analyze_xray_clusters(removed_positions)
+        else:
+            print("No X-ray spots detected")
+    
+    def _analyze_xray_clusters(self, removed_positions: List[Tuple[int, int]]) -> None:
+        """
+        Analyze spatial clustering of removed pixels to identify multi-pixel X-ray events.
+        
+        Args:
+            removed_positions: List of (row, col) coordinates of removed pixels
+        """
+        from collections import defaultdict
+        import random
+        
+        # Group pixels by proximity (4-connectivity)
+        visited = set()
+        clusters = []
+        
+        for position in removed_positions:
+            if position in visited:
+                continue
+            
+            # Start new cluster
+            cluster = []
+            stack = [position]
+            
+            while stack:
+                current = stack.pop()
+                if current in visited:
+                    continue
+                
+                visited.add(current)
+                cluster.append(current)
+                
+                # Check 4-connected neighbors
+                row, col = current
+                neighbors = [
+                    (row-1, col), (row+1, col),
+                    (row, col-1), (row, col+1)
+                ]
+                
+                for neighbor in neighbors:
+                    if neighbor in removed_positions and neighbor not in visited:
+                        stack.append(neighbor)
+            
+            if cluster:
+                clusters.append(cluster)
+        
+        # Analyze cluster sizes
+        cluster_sizes = [len(cluster) for cluster in clusters]
+        
+        print(f"\nX-ray cluster analysis:")
+        print(f"  Total clusters: {len(clusters)}")
+        print(f"  Cluster size range: {min(cluster_sizes)} - {max(cluster_sizes)} pixels")
+        
+        # Count clusters by size and track large clusters
+        size_bins = [(1, 1), (2, 3), (4, 6), (7, 10), (11, 20)]
+        large_clusters = []
+        
+        for low, high in size_bins:
+            matching_clusters = [cluster for cluster in clusters if low <= len(cluster) <= high]
+            count = len(matching_clusters)
+            
+            if count > 0:
+                print(f"  Clusters with {low}-{high} pixels: {count}")
+                
+                # Store large clusters for detailed reporting
+                if low == 7 or low == 11:  # 7-20 pixel clusters
+                    large_clusters += matching_clusters
+        
+        # Print position from 7-20 pixel clusters
+        if large_clusters:
+            print(f"\n7-20 pixel clusters:")
+            for i in range(len(large_clusters)):
+                # for all cluster from 7-20 pixel clusters
+                selected_cluster = large_clusters[i]
+                # Select a pixel from that cluster
+                pixel = selected_cluster[0]
+                row, col = pixel
+                intensity = self.raw_data[row, col]
+                print(f"  Position: ({row}, {col}), Intensity: {intensity:.1f}")
+
     def remove_background(self, background: np.ndarray) -> None:
         """
         Subtract background from raw_data to produce processed_data.
@@ -32,6 +304,7 @@ class EMCCDimage:
         background : np.ndarray
             Background image to subtract from raw_data
         """
+        self.filter_xray_spots_inplace()
         self.processed_data = self.raw_data - background
         #(MAYBE REMOVE GENERAL SHIFTS VIA TUNING)
         #(implement later: calculate mean as bkg but filter with sigma)
@@ -50,7 +323,7 @@ class EMCCDimage:
         return self.processed_data
     
     def copy_as_processed(self):
-        #DEBUG ONLY!!
+        #Use With Care!!
         self.processed_data = self.raw_data
     
     def find_diffraction_center(self, 

@@ -18,6 +18,7 @@ class BatchXPSProcessor:
                  data_directory: str,
                  bkg_directory: str,
                  bkg_filename: str,
+                 azimuthal_radius: int,
                  initial_center_guess: Tuple[float, float] = (512, 512)):
         """
         Initialize batch XPS processor.
@@ -31,6 +32,7 @@ class BatchXPSProcessor:
         self.data_directory = data_directory
         self.bkg_directory = bkg_directory
         self.bkg_filename = bkg_filename
+        self.azimuthal_radius = azimuthal_radius
         self.initial_center_guess = initial_center_guess
         self.merged_groups: List[Tuple[float, List[str]]] = []
         self.processed_results: List[XPSGroupResult] = []
@@ -93,6 +95,7 @@ class BatchXPSProcessor:
                     file_list=file_list,
                     bkg_directory=self.bkg_directory,
                     bkg_filename=self.bkg_filename,
+                    azimuthal_radius=self.azimuthal_radius,
                     initial_center_guess=self.initial_center_guess
                 )
                 

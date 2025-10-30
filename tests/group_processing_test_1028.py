@@ -12,6 +12,7 @@ batch_processor = BatchXPSProcessor(
     data_directory=r"E:\20250808\8_water_IR72deg_longscan5\fist_AndorEMCCD",
     bkg_directory=r"C:\Users\86177\Desktop\Diffraction_code\Temp_savespace",
     bkg_filename="calc_bkg.tiff",
+    azimuthal_radius=400,
     initial_center_guess=(720, 350)
 )
 
