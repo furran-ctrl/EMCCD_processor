@@ -24,9 +24,9 @@ class EMCCDimage:
         self.total_count: Optional[float] = None
     
     def filter_xray_spots_inplace(self, 
-                                 chunk_size: int = 64,
-                                 sigma_threshold: float = 5.0,
-                                 beam_threshold: float = 5000) -> None:
+                                 chunk_size: int = 32,
+                                 sigma_threshold: float = 29.6,
+                                 beam_threshold: float = 300) -> None:
         """
         Remove X-ray spots from raw data by local statistical filtering.
         
@@ -43,19 +43,20 @@ class EMCCDimage:
             ValueError: If raw_data is not available
             ValueError: If chunk_size is not a divisor of image dimensions
         """
-        if self.raw_data is None:
-            raise ValueError("Raw data not available")
+        if self.processed_data is None:
+            raise ValueError("Processed data not available")
         
-        height, width = self.raw_data.shape
+        height, width = self.processed_data.shape
         
         # Validate chunk_size
         if height % chunk_size != 0 or width % chunk_size != 0:
             raise ValueError(f"chunk_size {chunk_size} must divide both image dimensions {height}x{width}")
         
         # Convert to float for NaN support if not already
-        if not np.issubdtype(self.raw_data.dtype, np.floating):
-            self.raw_data = self.raw_data.astype(float)
+        if not np.issubdtype(self.processed_data.dtype, np.floating):
+            self.processed_data = self.processed_data.astype(float)
         
+        Flag = False
         # Process each chunk
         for row_start in range(0, height, chunk_size):
             for col_start in range(0, width, chunk_size):
@@ -63,23 +64,26 @@ class EMCCDimage:
                 col_end = col_start + chunk_size
                 
                 # Extract current chunk
-                chunk = self.raw_data[row_start:row_end, col_start:col_end]
+                chunk = self.processed_data[row_start:row_end, col_start:col_end]
                 
                 # Calculate chunk statistics
-                chunk_mean = np.mean(chunk)
-                chunk_std = np.std(chunk)
+                chunk_median = np.median(chunk)
+
+                # Calculate Median Absolute Deviation (MAD),29.6~20sigma for gaussian
+                chunk_mad = np.median(np.abs(chunk - chunk_median))
                 
                 # Skip processing if chunk contains central beam (high average intensity)
-                if chunk_mean > beam_threshold:
+                if chunk_median > beam_threshold:
                     continue
                 
                 # Calculate outlier threshold
-                outlier_threshold = chunk_mean + sigma_threshold * chunk_std
+                outlier_threshold = chunk_median + sigma_threshold * chunk_mad
                 
                 # Find pixels exceeding threshold and replace with NaN in place
                 outlier_mask = chunk > outlier_threshold
                 if np.any(outlier_mask):
-                    self.raw_data[row_start:row_end, col_start:col_end][outlier_mask] = np.nan
+                    outlier_mask = chunk > outlier_threshold - 7.4 * chunk_mad
+                    self.processed_data[row_start:row_end, col_start:col_end][outlier_mask] = np.nan
 
     def filter_xray_spots(self, 
                          chunk_size: int = 64,
@@ -304,10 +308,9 @@ class EMCCDimage:
         background : np.ndarray
             Background image to subtract from raw_data
         """
-        self.filter_xray_spots_inplace()
+
         self.processed_data = self.raw_data - background
-        #(MAYBE REMOVE GENERAL SHIFTS VIA TUNING)
-        #(implement later: calculate mean as bkg but filter with sigma)
+        self.filter_xray_spots_inplace()
     
     def get_processed_data(self) -> np.ndarray:
         """

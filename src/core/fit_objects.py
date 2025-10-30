@@ -87,8 +87,7 @@ class XPSGroupProcessor:
             image_file = EMCCDimage(TiffLoader(Path(filepath).parent, Path(filepath).name))
             
             # Remove background
-            with timer('xray and bkg'):
-                image_file.remove_background(self.bkg_image.get_processed_data())
+            image_file.remove_background(self.bkg_image.get_processed_data())
             
             # Find diffraction center
             with timer('center'):
