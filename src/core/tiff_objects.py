@@ -1,5 +1,6 @@
 import numpy as np
 from typing import Optional, Tuple, List
+from scipy.ndimage import shift
 
 from src.utils.gaussian_fitting import fit_circular_gaussian_ring
 from src.core.mask_class import RadialMasks, RingMask
@@ -56,7 +57,6 @@ class EMCCDimage:
         if not np.issubdtype(self.processed_data.dtype, np.floating):
             self.processed_data = self.processed_data.astype(float)
         
-        Flag = False
         # Process each chunk
         for row_start in range(0, height, chunk_size):
             for col_start in range(0, width, chunk_size):
@@ -82,7 +82,7 @@ class EMCCDimage:
                 # Find pixels exceeding threshold and replace with NaN in place
                 outlier_mask = chunk > outlier_threshold
                 if np.any(outlier_mask):
-                    outlier_mask = chunk > outlier_threshold - 7.4 * chunk_mad
+                    outlier_mask = chunk > outlier_threshold - sigma_threshold * 0.25 * chunk_mad
                     self.processed_data[row_start:row_end, col_start:col_end][outlier_mask] = np.nan
 
     def filter_xray_spots(self, 
@@ -299,7 +299,10 @@ class EMCCDimage:
                 intensity = self.raw_data[row, col]
                 print(f"  Position: ({row}, {col}), Intensity: {intensity:.1f}")
 
-    def remove_background(self, background: np.ndarray) -> None:
+    def remove_background(self, background: np.ndarray,
+                                 chunk_size: int = 32,
+                                 sigma_threshold: float = 29.6,
+                                 beam_threshold: float = 300) -> None:
         """
         Subtract background from raw_data to produce processed_data.
         
@@ -310,7 +313,7 @@ class EMCCDimage:
         """
 
         self.processed_data = self.raw_data - background
-        self.filter_xray_spots_inplace()
+        self.filter_xray_spots_inplace(chunk_size, sigma_threshold, beam_threshold)
     
     def get_processed_data(self) -> np.ndarray:
         """
@@ -389,9 +392,9 @@ class EMCCDimage:
             return None
 
     def ring_centroid(self,
-                          ring_mask: RingMask,
-                          center_guess: Tuple[float, float],
-                          save_total_count: bool = False) -> Tuple[float, float]:
+                  ring_mask: RingMask,
+                  center_guess: Tuple[float, float],
+                  save_total_count: bool = False) -> Tuple[float, float]:
         """
         Calculate centroid using precomputed ring mask and specified center guess.
         
@@ -431,21 +434,39 @@ class EMCCDimage:
         shift_x = int(round(center_x - mask_center_x))
         shift_y = int(round(center_y - mask_center_y))
         
-        # Shift image data to align specified center with precomputed mask center
-        shifted_data = np.roll(self.processed_data, shift=(-shift_y, -shift_x), axis=(0, 1))
+        # Use scipy.ndimage.shift instead of np.roll to handle NaN values properly
+        from scipy.ndimage import shift
+        shifted_data = shift(self.processed_data, 
+                            shift=(-shift_y, -shift_x), 
+                            order=0,  # nearest neighbor
+                            mode='constant', 
+                            cval=np.nan)
         
         # Extract intensity values within ring region using precomputed mask
         ring_data = shifted_data[ring_mask.mask]
         
-        # Calculate weighted centroid using precomputed coordinates
-        total_intensity = np.sum(ring_data)
+        # Filter out NaN values before centroid calculation
+        valid_mask = ~np.isnan(ring_data)
+        
+        if np.sum(valid_mask) == 0:
+            # No valid data in ring region, return original guess
+            if save_total_count:
+                self.total_count = 0
+            return center_guess
+        
+        valid_ring_data = ring_data[valid_mask]
+        valid_x_coords = ring_mask.x_coords_ring[valid_mask]
+        valid_y_coords = ring_mask.y_coords_ring[valid_mask]
+        
+        # Calculate weighted centroid using only valid data
+        total_intensity = np.sum(valid_ring_data)
         
         if total_intensity > 0:
-            x_center = np.sum(ring_mask.x_coords_ring * ring_data) / total_intensity
-            y_center = np.sum(ring_mask.y_coords_ring * ring_data) / total_intensity
+            x_center = np.sum(valid_x_coords * valid_ring_data) / total_intensity
+            y_center = np.sum(valid_y_coords * valid_ring_data) / total_intensity
         else:
             # Fallback to center guess if no intensity in ring
-            x_center, y_center = center_guess
+            x_center, y_center = mask_center_x, mask_center_y
         
         # Apply reverse shift to get coordinates in original image space
         final_x_center = x_center + shift_x
@@ -530,10 +551,9 @@ class EMCCDimage:
         self.center_pos = self.ring_centroid(ring_mask, current_center, save_total_count=True)
         return self.center_pos
     
-    def azimuthal_average(self, 
-                                  radial_masks: RadialMasks,
-                                  radius: float = 300,
-                                  num_bins: int = 300) -> Tuple[np.ndarray, np.ndarray]:
+    def azimuthal_average_bincount(self, 
+                      radial_masks: RadialMasks,
+                      precomputed_masks: dict) -> Tuple[np.ndarray, np.ndarray]:
         """
         Calculate azimuthal average using precomputed radial masks.
         
@@ -555,14 +575,6 @@ class EMCCDimage:
             ValueError: If processed_data or center_pos is not set
             ValueError: If image shape doesn't match mask shape
             ValueError: If radius or num_bins don't match precomputed masks
-            
-        Example:
-            >>> # Precompute masks once
-            >>> masks = precompute_radial_masks((1024, 1024))
-            >>> 
-            >>> # Process multiple images efficiently
-            >>> for image in images:
-            >>>     centers, intensities = image.azimuthal_average_optimized(masks)
         """
         if self.processed_data is None:
             raise ValueError("Processed data not available. Call remove_background() first.")
@@ -577,17 +589,7 @@ class EMCCDimage:
                 f"mask shape {radial_masks.image_shape}"
             )
         
-        if radius != radial_masks.radius:
-            raise ValueError(
-                f"Requested radius {radius} doesn't match precomputed radius {radial_masks.radius}"
-            )
-        
-        if num_bins != radial_masks.num_bins:
-            raise ValueError(
-                f"Requested num_bins {num_bins} doesn't match precomputed num_bins {radial_masks.num_bins}"
-            )
-        
-        # Calculate shift needed to align image center with mask center
+        # Calculate shift
         center_x, center_y = self.center_pos
         mask_center_x, mask_center_y = (
             radial_masks.image_shape[1] // 2, 
@@ -596,22 +598,40 @@ class EMCCDimage:
         
         shift_x = int(round(center_x - mask_center_x))
         shift_y = int(round(center_y - mask_center_y))
+
+        # Shift image data
+        from scipy.ndimage import shift
+        shifted_data = shift(self.processed_data, 
+                            shift=(-shift_y, -shift_x), 
+                            order=0,
+                            mode='constant', 
+                            cval=np.nan)
         
-        # Shift image data to align with precomputed mask center
-        shifted_data = np.roll(self.processed_data, shift=(-shift_y, -shift_x), axis=(0, 1))
+        # Flatten the data for fast indexing
+        flat_data = shifted_data.ravel()
         
-        # Calculate azimuthal average using precomputed masks
-        radial_average = np.zeros(num_bins)
-        pixel_counts = np.zeros(num_bins)
+        # Preallocate results
+        radial_average = np.full(precomputed_masks['num_bins'], np.nan)
+        pixel_counts = np.zeros(precomputed_masks['num_bins'])
         
-        for i in range(num_bins):
-            mask = radial_masks.masks[i]
-            if np.any(mask):
-                radial_average[i] = np.mean(shifted_data[mask])
-                pixel_counts[i] = np.sum(mask)
-        
+        # Only process valid bins
+        valid_pixels_total = 0
+        for i in precomputed_masks['valid_bins']:
+            indices = precomputed_masks['flat_indices'][i]
+            if len(indices) > 0:
+                # Extract values using precomputed indices
+                values = flat_data[indices]
+                
+                # Filter out NaN values efficiently
+                valid_values = values[~np.isnan(values)]
+                
+                if len(valid_values) > 0:
+                    radial_average[i] = np.mean(valid_values)
+                    pixel_counts[i] = len(valid_values)
+                    valid_pixels_total += len(valid_values)
+                    
         return radial_masks.bin_centers, radial_average
-    
+
     def azimuthal_average_legacy(self, 
                                radius: float = 300,
                                num_bins: int = 300) -> Tuple[np.ndarray, np.ndarray]:

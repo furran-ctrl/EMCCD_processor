@@ -21,8 +21,8 @@ class RadialMasks:
     num_bins: int
 
 def precompute_radial_masks(image_shape: Tuple[int, int] = (1024, 1024), 
-                           radius: float = 300, 
-                           num_bins: int = 300) -> RadialMasks:
+                           radius: float = 512, 
+                           num_bins: int = 512) -> RadialMasks:
     """
     Precompute radial masks for azimuthal averaging.
     
@@ -39,7 +39,7 @@ def precompute_radial_masks(image_shape: Tuple[int, int] = (1024, 1024),
         RadialMasks object containing precomputed masks and bin information
         
     Example:
-        >>> masks = precompute_radial_masks((1024, 1024), radius=300, num_bins=100)
+        >>> masks = precompute_radial_masks((1024, 1024), radius=512, num_bins=512)
         >>> print(f"Created {len(masks.masks)} radial masks")
     """
     height, width = image_shape
@@ -68,6 +68,46 @@ def precompute_radial_masks(image_shape: Tuple[int, int] = (1024, 1024),
         radius=radius,
         num_bins=num_bins
     )
+
+def precompute_azimuthal_average_masks(radial_masks):
+    """
+    Precompute optimized data structures for fast azimuthal averaging.
+    
+    Args:
+        radial_masks: Precomputed RadialMasks object
+        image_shape: Shape of the images to be processed
+        
+    Returns:
+        dict: Precomputed data structures for fast averaging
+    """
+    num_bins = radial_masks.num_bins
+    image_shape = radial_masks.image_shape
+
+    # Precompute flat indices for all masks
+    flat_indices = []
+    valid_mask_flags = []
+    
+    for i in range(num_bins):
+        mask = radial_masks.masks[i]
+        if np.any(mask):
+            # Convert 2D boolean mask to flat indices
+            indices = np.where(mask.ravel())[0]
+            flat_indices.append(indices)
+            valid_mask_flags.append(True)
+        else:
+            flat_indices.append(np.array([], dtype=int))
+            valid_mask_flags.append(False)
+    
+    # Precompute which bins have valid data
+    valid_bins = np.array([i for i in range(num_bins) if valid_mask_flags[i]])
+    
+    return {
+        'flat_indices': flat_indices,
+        'valid_mask_flags': valid_mask_flags,
+        'valid_bins': valid_bins,
+        'num_bins': num_bins,
+        'total_pixels': image_shape[0] * image_shape[1]
+    }
 
 @dataclass
 class RingMask:

@@ -7,7 +7,7 @@ from src.core.tiff_objects import EMCCDimage
 from src.io.tiff_import import TiffLoader
 from src.core.reslut_class import ProcessedResult, XPSGroupResult
 from src.utils.timer import timer
-from src.core.mask_class import RadialMasks, precompute_radial_masks, RingMask, precompute_ring_mask
+from src.core.mask_class import RingMask, precompute_ring_mask, RadialMasks, precompute_radial_masks, precompute_azimuthal_average_masks
 
 class XPSGroupProcessor:
     """
@@ -44,7 +44,9 @@ class XPSGroupProcessor:
         self.results: Optional[XPSGroupResult] = None
         self.bkg_image: Optional[EMCCDimage] = None
         self.ring_mask: RingMask = precompute_ring_mask()
-        self.radial_masks: RadialMasks = precompute_radial_masks(radius=self.radius, num_bins=self.radius)
+        self.radial_masks: RadialMasks = \
+                        precompute_radial_masks(radius=self.radius, num_bins=self.radius)
+        self.azimuthal_masks: dict = precompute_azimuthal_average_masks(self.radial_masks, (1024,1024))
     
     def load_background(self) -> None:
         """
@@ -85,22 +87,24 @@ class XPSGroupProcessor:
         try:
             # Load image file
             image_file = EMCCDimage(TiffLoader(Path(filepath).parent, Path(filepath).name))
-            
+
             # Remove background
             image_file.remove_background(self.bkg_image.get_processed_data())
-            
+
             # Find diffraction center
             with timer('center'):
                 center = image_file.iterative_ring_centroid(self.ring_mask, self.initial_center_guess)
-            
+
             # Calculate azimuthal average
             with timer('azimuthal'):
-                bin_centers, radial_average = image_file.azimuthal_average(self.radial_masks,
-                                                                        radius = self.radius,
-                                                                        num_bins = self.radius)
-            
+                bin_centers, radial_average = image_file.azimuthal_average_bincount(self.radial_masks,
+                                                                            self.azimuthal_masks,
+                                                                            radius= self.radius,
+                                                                            num_bins= self.radius)
+
             return ProcessedResult(
                 center=center,
+                total_count=image_file.total_count,
                 radial_profile=radial_average,
             )
             
@@ -141,7 +145,7 @@ class XPSGroupProcessor:
             if result is not None:
                 all_radial_profiles.append(result.radial_profile)
                 centers.append(result.center)
-                total_counts.append(np.sum(result.radial_profile))
+                total_counts.append(result.total_count)
                 successful_files += 1
         
         if successful_files == 0:

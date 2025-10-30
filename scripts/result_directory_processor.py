@@ -1,0 +1,364 @@
+import numpy as np
+import pandas as pd
+from pathlib import Path
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List, Tuple, Dict, Optional
+import logging
+from dataclasses import asdict
+import json
+
+from src.core.processor_objects import XPSGroupProcessor
+from src.io.xps_value_sort import group_tiff_files_with_info, merge_xps_groups_strategy
+from src.io.tiff_import import TiffLoader
+from src.core.mask_class import precompute_ring_mask, precompute_radial_masks, precompute_azimuthal_average_masks
+from src.core.reslut_class import ProcessingConfig
+
+class DirectoryProcessor:
+    def __init__(self,
+                 result_directory: str,
+                 data_directory:str,
+                 background_directory: str,
+                 xps_grouping_param: List[float],
+                 xray_removal_param: List[float],
+                 center_fitting_param: List[float],
+                 azimuthal_avg_param: List[float]):
+        """
+        Initialize Directory Processor for sorting and processing files.
+        
+        Args:
+            result_directory: Directory for containing results 
+            data_directory: Directory containing data for processing
+            background_directory: Directory for background files or 'default'
+            xps_grouping_param: [threshold, tolerance] for XPS grouping
+            xray_removal_param: [chunk_size, sigma_threshold, beam_threshold]
+            center_fitting_param: [inner_radius, outer_radius, center_x, center_y]
+            azimuthal_avg_param: [radius, num_bins]
+        """
+        self.result_directory = Path(result_directory)
+        self.background_directory = background_directory
+        self.background_data = None
+        self.xps_grouping_param = xps_grouping_param
+        self.xray_removal_param = xray_removal_param
+        self.center_fitting_param = center_fitting_param
+        self.azimuthal_avg_param = azimuthal_avg_param
+        
+        # Initialize empty configs
+        self.center_config = []  # [ring_mask, initial_guess]
+        self.azimuthal_config = []  # [radial_masks, azimuthal_mask_dict]
+        
+        # Other necessary variables
+        self.merged_groups = []
+        self.data_directory = data_directory
+        self.lock = threading.Lock()
+        
+        # Configure logging
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        self.logger = logging.getLogger(__name__)
+
+    def initialize_masks(self) -> None:
+        """
+        Initialize all masks used for processing.
+        """
+        self.logger.info("Initializing processing masks...")
+        
+        # Extract parameters
+        inner_radius, outer_radius, center_x, center_y = self.center_fitting_param
+        radius, num_bins = self.azimuthal_avg_param
+        initial_guess = (center_x, center_y)
+        
+        # Initialize ring mask
+        ring_mask = precompute_ring_mask(
+            inner_radius=inner_radius, 
+            outer_radius=outer_radius
+        )
+        
+        # Initialize radial masks
+        radial_masks = precompute_radial_masks(
+            radius=radius, 
+            num_bins=num_bins
+        )
+        
+        # Initialize azimuthal mask dictionary
+        azimuthal_mask_dict = precompute_azimuthal_average_masks(radial_masks)
+        
+        # Set center and azimuthal configs
+        self.center_config = [ring_mask, initial_guess]
+        self.azimuthal_config = [radial_masks, azimuthal_mask_dict]
+        
+        self.logger.info("Masks initialized successfully")
+
+    def initialize_background(self) -> None:
+        """
+        Initialize background data from specified directory.
+        """
+        self.logger.info("Initializing background data...")
+        
+        if self.background_directory == 'default':
+            # Load from result_directory/background.tiff
+            background_path = self.result_directory / "background.tiff"
+            if not background_path.exists():
+                raise FileNotFoundError(f"Default background file not found: {background_path}")
+            
+            self.background_data = TiffLoader(background_path.parent, background_path.name)
+            self.logger.info(f"Loaded background from: {background_path}")
+        
+        else:
+            # Load from specified directory
+            background_dir = Path(self.background_directory)
+            tiff_files = list(background_dir.glob("*.tiff")) + list(background_dir.glob("*.tif"))
+            
+            if not tiff_files:
+                raise FileNotFoundError(f"No TIFF files found in background directory: {background_dir}")
+            
+            # Use the first TIFF file found
+            background_file = tiff_files[0]
+            self.background_data = TiffLoader(background_file.parent, background_file.name)
+            self.logger.info(f"Loaded background from: {background_file}")
+
+    def sort_file_into_xpsgroups(self) -> None:
+        """
+        Sort files into XPS groups and merge similar groups.
+        """
+        self.logger.info("Sorting files into XPS groups...")
+        
+        # Group files by XPS value
+        groups_with_xps = group_tiff_files_with_info(self.data_directory)
+        
+        # Extract threshold and tolerance
+        threshold, tolerance = self.xps_grouping_param
+        
+        # Merge similar XPS groups
+        self.merged_groups = merge_xps_groups_strategy(
+            groups_with_xps, 
+            threshold=threshold, 
+            tolerance=tolerance
+        )
+        
+        self.logger.info(f"Sorted into {len(self.merged_groups)} XPS groups")
+
+    def process_xps_group(self, xps_group: Dict, analyze_no: str) -> None:
+        """
+        Process a single XPS group.
+        
+        Args:
+            xps_group: Dictionary containing XPS value and file list
+            analyze_no: Analysis number for organizing results
+        """
+        xps_value = xps_group['xps_value']
+        filelist = xps_group['file_paths']
+        
+        # Create result directory for this XPS group
+        group_result_dir = self.result_directory / analyze_no / f"xps_{xps_value:.2f}"
+        
+        with self.lock:
+            if group_result_dir.exists():
+                raise FileExistsError(f"Result directory already exists: {group_result_dir}")
+            group_result_dir.mkdir(parents=True, exist_ok=True)
+        
+        self.logger.info(f"Processing XPS group {xps_value:.2f} with {len(filelist)} files")
+        
+        # Initialize and run XPSGroupProcessor
+        processor = XPSGroupProcessor(
+            background_data=self.background_data,
+            X_ray_config=self.xray_removal_param,
+            center_config=self.center_config,
+            azimuthal_config=self.azimuthal_config,
+            xps_value=xps_value,
+            filelist=filelist,
+            resultdir=str(group_result_dir)
+        )
+        
+        processor.process_group(batch_size=100)
+        self.logger.info(f"Completed processing XPS group {xps_value:.2f}")
+
+    def process_in_sequence(self, analyze_no: str) -> None:
+        """
+        Process XPS groups sequentially.
+        
+        Args:
+            analyze_no: Analysis number for organizing results
+        """
+        self.logger.info(f"Starting sequential processing for analysis {analyze_no}")
+        
+        # Ensure masks and background are initialized
+        if not self.center_config or not self.azimuthal_config:
+            self.initialize_masks()
+        if self.background_data is None:
+            self.initialize_background()
+        
+        # Sort files if not already sorted
+        if not self.merged_groups:
+            self.sort_file_into_xpsgroups()
+        
+        # Save config before processing
+        self.save_config(analyze_no)
+        
+        # Process each group sequentially
+        for i, group in enumerate(self.merged_groups):
+            self.logger.info(f"Processing group {i+1}/{len(self.merged_groups)}")
+            try:
+                self.process_xps_group(group, analyze_no)
+            except Exception as e:
+                self.logger.error(f"Failed to process group {group['xps_value']:.2f}: {str(e)}")
+        
+        self.logger.info("Sequential processing completed")
+
+    def process_in_parallel(self, max_workers: int, analyze_no: str) -> None:
+        """
+        Process XPS groups in parallel.
+        
+        Args:
+            max_workers: Maximum number of parallel threads
+            analyze_no: Analysis number for organizing results
+        """
+        self.logger.info(f"Starting parallel processing with {max_workers} workers for analysis {analyze_no}")
+        
+        # Ensure masks and background are initialized
+        if not self.center_config or not self.azimuthal_config:
+            self.initialize_masks()
+        if self.background_data is None:
+            self.initialize_background()
+        
+        # Sort files if not already sorted
+        if not self.merged_groups:
+            self.sort_file_into_xpsgroups()
+        
+        # Save config before processing
+        self.save_config(analyze_no)
+        
+        # Process groups in parallel
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            future_to_group = {
+                executor.submit(self.process_xps_group, group, analyze_no): group 
+                for group in self.merged_groups
+            }
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_group):
+                group = future_to_group[future]
+                try:
+                    future.result()
+                    self.logger.info(f"Successfully completed group {group['xps_value']:.2f}")
+                except Exception as e:
+                    self.logger.error(f"Failed to process group {group['xps_value']:.2f}: {str(e)}")
+        
+        self.logger.info("Parallel processing completed")
+
+    def save_config(self, analyze_no: str) -> None:
+        """
+        Save processing configuration to file.
+        
+        Args:
+            analyze_no: Analysis number for organizing results
+        """
+        config_dir = self.result_directory / analyze_no
+        config_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create config object
+        config = ProcessingConfig(
+            result_directory=str(self.result_directory),
+            background_directory=self.background_directory,
+            xps_grouping_param=self.xps_grouping_param,
+            xray_removal_param=self.xray_removal_param,
+            center_fitting_param=self.center_fitting_param,
+            azimuthal_avg_param=self.azimuthal_avg_param
+        )
+        
+        # Save as CSV
+        config_df = pd.DataFrame([asdict(config)])
+        config_csv_path = config_dir / "config.csv"
+        config_df.to_csv(config_csv_path, index=False)
+        
+        # Also save as JSON for easier reading
+        config_json_path = config_dir / "config.json"
+        with open(config_json_path, 'w') as f:
+            json.dump(asdict(config), f, indent=2)
+        
+        self.logger.info(f"Configuration saved to {config_csv_path}")
+
+    def load_config(self, analyze_no: str) -> None:
+        """
+        Load processing configuration from file.
+        
+        Args:
+            analyze_no: Analysis number to load configuration from
+        """
+        config_path = self.result_directory / analyze_no / "config.csv"
+        
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found: {config_path}")
+        
+        # Load configuration
+        config_df = pd.read_csv(config_path)
+        config_dict = config_df.iloc[0].to_dict()
+        
+        # Update instance variables
+        self.result_directory = Path(config_dict['result_directory'])
+        self.background_directory = config_dict['background_directory']
+        self.xps_grouping_param = eval(config_dict['xps_grouping_param']) if isinstance(config_dict['xps_grouping_param'], str) else config_dict['xps_grouping_param']
+        self.xray_removal_param = eval(config_dict['xray_removal_param']) if isinstance(config_dict['xray_removal_param'], str) else config_dict['xray_removal_param']
+        self.center_fitting_param = eval(config_dict['center_fitting_param']) if isinstance(config_dict['center_fitting_param'], str) else config_dict['center_fitting_param']
+        self.azimuthal_avg_param = eval(config_dict['azimuthal_avg_param']) if isinstance(config_dict['azimuthal_avg_param'], str) else config_dict['azimuthal_avg_param']
+        
+        # Reinitialize masks with loaded parameters
+        self.initialize_masks()
+        self.initialize_background()
+        
+        self.logger.info(f"Configuration loaded from {config_path}")
+
+
+'''
+define a class DirectoryProcessor to sort and process the files under result directory:
+the class shoud have self variables:
+result_directory
+background_directory
+background_data (initially empty)
+xps_grouping_param List[threshold , tolerance]
+xray_removal_param List[chunk_size, sigma_threshold, beam_threshold]
+center_fitting_param List[inner_radius,outer_radius,center_guess[float,float]]
+center_config: [ring_mask, initial_guess](initially empty)
+azimuthal_avg_param List[radius,num_bins]
+azimuthal_config: [radial_masks, azimuthal_mask_dict](initially empty)
+and other necessary variables.
+
+the class should take advantage of the predefined XPSGroupProcessor to process
+
+class functions:
+initialize_masks: initialize all the mask used for processing by
+    ring_mask = precompute_ring_mask(inner_radius=center_fitting_param[0], outer_radius=center_fitting_param[1])
+    radial_masks = precompute_radial_masks(radius=azimuthal_avg_param[0], num_bins=azimuthal_avg_param[1])
+    azimuthal_mask_dict = precompute_azimuthal_average_masks(radial_masks)
+    then initialize center_config and azimuthal_config 
+
+initialize_background: 
+    if the background_directory == 'default', then background is at result_directory/background.tiff, load using TiffLoader.
+    otherwise, background_data = TiffLoader(Path(filepath).parent, Path(filepath).name)
+
+sort_file_into_xpsgroups: main logic as follows
+        # Group files by XPS value
+        groups_with_xps = group_tiff_files_with_info(self.data_directory)
+        
+        # Merge similar XPS groups
+        self.merged_groups = merge_xps_groups_strategy(
+            groups_with_xps, 
+            threshold=threshold, 
+            tolerance=tolerance
+        )
+
+process_in_sequence(analyze_no): initialize XPSGroupProcessor, process xps group one by one
+process_in_parallel(max_workers,analyze_no): 
+    process in multiple threads, each xps group gats one thread, there should be no more 
+    then max_workers of threads running at the same time.
+
+    for the process_in_sequence and process_in_parallel, the result directory for a xpsgroup
+    should be:self.result_directory/analyze_no/xps_value, create the directory before 
+    launching XPSGroupProcessor, raise Error if xps_value folder is already created 
+
+load_config(analyze_no): load the parameters required upon initializing from result_directory/analyze_no/config.csv 
+    use this for initializing the DirectoryProcessor class
+
+also define a seperate function and dataclass outside of the class to save all the parameters 
+    required upon initializing to result_directory/analyze_no/config.csv
+'''
