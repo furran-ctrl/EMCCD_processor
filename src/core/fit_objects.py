@@ -9,6 +9,9 @@ from src.core.reslut_class import ProcessedResult, XPSGroupResult
 from src.utils.timer import timer
 from src.core.mask_class import RingMask, precompute_ring_mask, RadialMasks, precompute_radial_masks, precompute_azimuthal_average_masks
 
+#This file is a vintage version of processor class, no longer of use
+#Currently using processor_object class
+
 class XPSGroupProcessor:
     """
     Processor for handling all files within a single XPS group.

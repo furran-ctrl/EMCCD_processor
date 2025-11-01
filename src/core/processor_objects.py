@@ -7,6 +7,7 @@ import logging
 
 from src.core.tiff_objects import EMCCDimage
 from src.io.tiff_import import TiffLoader
+from src.utils.timer import timer
 
 class XPSGroupProcessor:
     def __init__(self, 
@@ -60,30 +61,33 @@ class XPSGroupProcessor:
             ProcessedResult object if successful, None if failed
         """
         try:
-            self.logger.info(f"Processing: {Path(filepath).name}")
+            #self.logger.info(f"Processing: {Path(filepath).name}")
             
             # Load image file
             image_file = EMCCDimage(TiffLoader(Path(filepath).parent, Path(filepath).name))
 
             # Remove background
-            image_file.remove_background(
-                self.background_data,
-                self.X_ray_config[0],  # chunk_size
-                self.X_ray_config[1],  # sigma_threshold
-                self.X_ray_config[2]   # beam_threshold
-            )
+            with timer('bkg_removal'):
+                image_file.remove_background(
+                    self.background_data,
+                    self.X_ray_config[0],  # chunk_size
+                    self.X_ray_config[1],  # sigma_threshold
+                    self.X_ray_config[2]   # beam_threshold
+                )
 
             # Find diffraction center
-            center = image_file.iterative_ring_centroid(
-                self.center_config[0],  # ring_mask
-                self.center_config[1]   # initial_guess
-            )
+            with timer('center_finding'):
+                center = image_file.iterative_ring_centroid(
+                    self.center_config[0],  # ring_mask
+                    self.center_config[1]   # initial_guess
+                )
 
             # Calculate azimuthal average
-            bin_centers, radial_average = image_file.azimuthal_average_bincount(
-                self.azimuthal_config[0],  # radial_masks
-                self.azimuthal_config[1]   # azimuthal_mask dict
-            )
+            with timer('azimuthal_avg'):
+                bin_centers, radial_average = image_file.azimuthal_average_bincount(
+                    self.azimuthal_config[0],  # radial_masks
+                    self.azimuthal_config[1]   # azimuthal_mask dict
+                )
 
             # Create result object
             result = ProcessedResult(
@@ -94,7 +98,7 @@ class XPSGroupProcessor:
                 xps_value=self.xps_value
             )
 
-            self.logger.info(f"Successfully processed: {Path(filepath).name}")
+            #self.logger.info(f"Successfully processed: {Path(filepath).name}")
             return result
 
         except Exception as e:

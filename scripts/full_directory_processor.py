@@ -135,28 +135,33 @@ class DirectoryProcessor:
             tolerance=tolerance
         )
         
-        self.logger.info(f"Sorted into {len(self.merged_groups)} XPS groups")
+        # Display group information
+        print(f"\nXPS Groups Summary:")
+        print("=" * 40)
+        for xps_value, files in self.merged_groups:
+            print(f"XPS {xps_value:.5f}: {len(files)} files")
+        print(f"\nTotal: {len(self.merged_groups)} XPS groups")
 
-    def process_xps_group(self, xps_group: Dict, analyze_no: str) -> None:
+    def process_xps_group(self, xps_group: Tuple[float, List[str]], analyze_no: str) -> None:
         """
         Process a single XPS group.
         
         Args:
-            xps_group: Dictionary containing XPS value and file list
+            xps_group: Tuple containing (xps_value, file_list)
             analyze_no: Analysis number for organizing results
         """
-        xps_value = xps_group['xps_value']
-        filelist = xps_group['file_paths']
+        # Extract values from tuple
+        xps_value, filelist = xps_group
         
         # Create result directory for this XPS group
-        group_result_dir = self.result_directory / analyze_no / f"xps_{xps_value:.2f}"
+        group_result_dir = self.result_directory / analyze_no / f"xps_{xps_value:.5f}"
         
         with self.lock:
             if group_result_dir.exists():
                 raise FileExistsError(f"Result directory already exists: {group_result_dir}")
             group_result_dir.mkdir(parents=True, exist_ok=True)
         
-        self.logger.info(f"Processing XPS group {xps_value:.2f} with {len(filelist)} files")
+        self.logger.info(f"Processing XPS group {xps_value:.5f} with {len(filelist)} files")
         
         # Initialize and run XPSGroupProcessor
         processor = XPSGroupProcessor(
@@ -170,7 +175,7 @@ class DirectoryProcessor:
         )
         
         processor.process_group(batch_size=100)
-        self.logger.info(f"Completed processing XPS group {xps_value:.2f}")
+        self.logger.info(f"Completed processing XPS group {xps_value:.5f}")
 
     def process_in_sequence(self, analyze_no: str) -> None:
         """
@@ -240,9 +245,11 @@ class DirectoryProcessor:
                 group = future_to_group[future]
                 try:
                     future.result()
-                    self.logger.info(f"Successfully completed group {group['xps_value']:.2f}")
+                    xps_val = group[0]  # Extract xps_value from tuple
+                    self.logger.info(f"Successfully completed group {xps_val:.2f}")
                 except Exception as e:
-                    self.logger.error(f"Failed to process group {group['xps_value']:.2f}: {str(e)}")
+                    xps_val = group[0]  # Extract xps_value from tuple
+                    self.logger.error(f"Failed to process group {xps_val:.2f}: {str(e)}")
         
         self.logger.info("Parallel processing completed")
 

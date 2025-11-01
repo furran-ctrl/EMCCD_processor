@@ -6,6 +6,9 @@ from src.core.fit_objects import XPSGroupProcessor
 from src.core.reslut_class import XPSGroupResult
 from src.io.xps_value_sort import group_tiff_files_with_info, merge_xps_groups_strategy
 
+#This is a vintage version of full processing, no longer used
+#Currently using full_directory_processor
+
 class BatchXPSProcessor:
     """
     Batch processor for handling multiple XPS groups.
