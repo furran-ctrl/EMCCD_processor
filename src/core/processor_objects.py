@@ -23,7 +23,7 @@ class XPSGroupProcessor:
         
         Args:
             background_data: Background data for subtraction
-            X_ray_config: [chunk_size, sigma_threshold, beam_threshold]
+            X_ray_config: [sigma_threshold, expansion_threshold_ratio]
             center_config: [ring_mask, initial_guess]
             azimuthal_config: [radial_masks, azimuthal_mask_dict]
             xps_value: XPS value for this group
@@ -31,12 +31,15 @@ class XPSGroupProcessor:
             resultdir: Directory to save results
         """
         self.background_data = background_data
-        self.X_ray_config = X_ray_config  # [chunk_size, sigma_threshold, beam_threshold]
+        self.X_ray_config = X_ray_config  # [sigma_threshold, expansion_threshold_ratio]
         self.center_config = center_config  # [ring_mask, initial_guess]
         self.azimuthal_config = azimuthal_config  # [radial_masks, azimuthal_mask_dict]
         self.xps_value = xps_value
         self.filelist = filelist
         self.resultdir = Path(resultdir)
+        
+        #Create list for storing median and mad ndarray to sort Xray spots
+        self.X_ray_precompute = None
         
         # Create result directory if it doesn't exist
         self.resultdir.mkdir(parents=True, exist_ok=True)
@@ -49,6 +52,89 @@ class XPSGroupProcessor:
         # Configure logging
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
+
+    def precompute_xray_statistics(self, center_region_size: int = 40, sample_size: int = 50) -> None:
+        """
+        Precompute median and MAD arrays for X-ray removal using random sampling.
+        
+        Args:
+            center_region_size: Size of center region to ignore (square around center)
+            sample_size: Number of random images to use for statistics
+        """
+        if not self.filelist:
+            raise ValueError("File list is empty")
+        
+        # Determine how many files to sample
+        if len(self.filelist) <= sample_size:
+            sample_files = self.filelist
+            self.logger.info(f"Using all {len(sample_files)} files for X-ray statistics precomputation")
+        else:
+            # Randomly sample files
+            import random
+            sample_files = random.sample(self.filelist, sample_size)
+            self.logger.info(f"Randomly sampled {len(sample_files)} files for X-ray statistics precomputation")
+        
+        all_processed_images = []
+        
+        # Load and process sample images
+        for i, filepath in enumerate(sample_files):
+            try:
+                #self.logger.info(f"Processing sample {i+1}/{len(sample_files)}: {Path(filepath).name}")
+                
+                # Load image
+                image = EMCCDimage(TiffLoader(Path(filepath).parent, Path(filepath).name))
+                
+                # Remove only background, no Xray filter 
+                image.remove_background_legacy(
+                    self.background_data
+                )
+                
+                # Store the processed data
+                all_processed_images.append(image.processed_data)
+                
+            except Exception as e:
+                self.logger.warning(f"Failed to process sample {filepath}: {str(e)}")
+                continue
+        
+        if not all_processed_images:
+            raise ValueError("No images were successfully processed for X-ray statistics")
+        
+        # Stack images and compute statistics
+        image_stack = np.stack(all_processed_images, axis=0)
+        
+        # Compute median across the sample
+        median_array = np.median(image_stack, axis=0)
+        
+        # Compute MAD (Median Absolute Deviation)
+        abs_deviation = np.abs(image_stack - median_array)
+        mad_array = np.median(abs_deviation, axis=0)
+        
+        # Get center position from center_config
+        center_x, center_y = self.center_config[1]  # initial_guess tuple
+        
+        # Set center region to NaN to ignore bright diffraction center
+        height, width = median_array.shape
+        half_size = center_region_size // 2
+        
+        row_start = int(round(center_y - half_size))
+        row_end = int(round(center_y + half_size))
+        col_start = int(round(center_x - half_size))
+        col_end = int(round(center_x + half_size))
+        
+        # Ensure indices are within bounds
+        row_start = max(0, row_start)
+        row_end = min(height, row_end)
+        col_start = max(0, col_start)
+        col_end = min(width, col_end)
+        
+        # Set center region to NaN
+        median_array[row_start:row_end, col_start:col_end] = np.nan
+        mad_array[row_start:row_end, col_start:col_end] = np.nan
+        
+        # Store precomputed statistics
+        self.X_ray_precompute = [median_array, mad_array]
+        
+        self.logger.info(f"X-ray statistics precomputation completed. Center region ({center_region_size}x{center_region_size}) excluded.")
 
     def process_single(self, filepath: str) -> Optional['ProcessedResult']:
         """
@@ -67,27 +153,28 @@ class XPSGroupProcessor:
             image_file = EMCCDimage(TiffLoader(Path(filepath).parent, Path(filepath).name))
 
             # Remove background
-            with timer('bkg_removal'):
-                image_file.remove_background(
-                    self.background_data,
-                    self.X_ray_config[0],  # chunk_size
-                    self.X_ray_config[1],  # sigma_threshold
-                    self.X_ray_config[2]   # beam_threshold
-                )
+            #with timer('bkg_removal'):
+            image_file.remove_background(
+                self.background_data,
+                self.X_ray_precompute[0],  # median_array
+                self.X_ray_precompute[1],  # mad_array
+                self.X_ray_config[0],  # sigma_threshold
+                self.X_ray_config[1]   # expansion_threshold_ratio
+            )
 
             # Find diffraction center
-            with timer('center_finding'):
-                center = image_file.iterative_ring_centroid(
-                    self.center_config[0],  # ring_mask
-                    self.center_config[1]   # initial_guess
-                )
+            #with timer('center_finding'):
+            center = image_file.iterative_ring_centroid(
+                self.center_config[0],  # ring_mask
+                self.center_config[1]   # initial_guess
+            )
 
             # Calculate azimuthal average
-            with timer('azimuthal_avg'):
-                bin_centers, radial_average = image_file.azimuthal_average_bincount(
-                    self.azimuthal_config[0],  # radial_masks
-                    self.azimuthal_config[1]   # azimuthal_mask dict
-                )
+            #with timer('azimuthal_avg'):
+            bin_centers, radial_average = image_file.azimuthal_average_bincount(
+                self.azimuthal_config[0],  # radial_masks
+                self.azimuthal_config[1]   # azimuthal_mask dict
+            )
 
             # Create result object
             result = ProcessedResult(
@@ -119,8 +206,12 @@ class XPSGroupProcessor:
         start_time = time.time()
         batch_results = []
         
+        # Precompute X-ray statistics once for the entire group
+        self.precompute_xray_statistics()
+
         for i, filepath in enumerate(self.filelist, 1):
             # Process single file
+            #with timer('single'):
             result = self.process_single(filepath)
             
             if result is not None:

@@ -31,7 +31,7 @@ class DirectoryProcessor:
             data_directory: Directory containing data for processing
             background_directory: Directory for background files or 'default'
             xps_grouping_param: [threshold, tolerance] for XPS grouping
-            xray_removal_param: [chunk_size, sigma_threshold, beam_threshold]
+            xray_removal_param: [sigma_threshold, expansion_threshold_ratio]
             center_fitting_param: [inner_radius, outer_radius, center_x, center_y]
             azimuthal_avg_param: [radius, num_bins]
         """
@@ -323,7 +323,7 @@ result_directory
 background_directory
 background_data (initially empty)
 xps_grouping_param List[threshold , tolerance]
-xray_removal_param List[chunk_size, sigma_threshold, beam_threshold]
+xray_removal_param List[sigma_threshold, expansion_threshold_ratio]
 center_fitting_param List[inner_radius,outer_radius,center_guess[float,float]]
 center_config: [ring_mask, initial_guess](initially empty)
 azimuthal_avg_param List[radius,num_bins]

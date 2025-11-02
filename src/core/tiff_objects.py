@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Optional, Tuple, List
 from scipy.ndimage import shift
+from scipy.ndimage import binary_dilation
 
 from src.utils.gaussian_fitting import fit_circular_gaussian_ring
 from src.core.mask_class import RadialMasks, RingMask
@@ -84,6 +85,54 @@ class EMCCDimage:
                 if np.any(outlier_mask):
                     outlier_mask = chunk > outlier_threshold - sigma_threshold * 0.25 * chunk_mad
                     self.processed_data[row_start:row_end, col_start:col_end][outlier_mask] = np.nan
+
+    def filter_xray_optimized(self, 
+                         median_array: np.ndarray,
+                         mad_array: np.ndarray,
+                         sigma_threshold: float = 29.6,
+                         expansion_threshold_ratio: float = 0.7) -> None:
+        """
+        Remove X-ray hits using precomputed median and MAD arrays.
+        
+        Args:
+            median_array: Precomputed median values for each pixel
+            mad_array: Precomputed MAD values for each pixel  
+            sigma_threshold: Threshold for identifying X-ray hits
+            expansion_threshold_ratio: Ratio for expanding X-ray region detection
+        """
+        if self.processed_data is None:
+            raise ValueError("Processed data not available")
+        
+        # Convert to float for NaN support if not already
+        if not np.issubdtype(self.processed_data.dtype, np.floating):
+            self.processed_data = self.processed_data.astype(float)
+        
+        # Calculate outlier threshold for each pixel
+        outlier_threshold = median_array + sigma_threshold * mad_array
+        
+        # Find initial X-ray hits (pixels significantly brighter than group median)
+        xray_mask = self.processed_data > outlier_threshold
+        
+        if not np.any(xray_mask):
+            return  # No X-rays found
+        
+        # Expand mask to include surrounding pixels with lower threshold
+        expansion_threshold = median_array + (sigma_threshold * expansion_threshold_ratio) * mad_array
+        
+        # Use binary dilation to expand the X-ray regions
+        # Create structure for dilation (3x3 cross)
+        structure = np.array([[0, 1, 0],
+                            [1, 1, 1], 
+                            [0, 1, 0]], dtype=bool)
+        
+        # Dilate the initial X-ray mask
+        expanded_mask = binary_dilation(xray_mask, structure=structure)
+        
+        # Include pixels that exceed the expansion threshold within the dilated region
+        final_xray_mask = expanded_mask & (self.processed_data > expansion_threshold)
+        
+        # Replace X-ray pixels with NaN
+        self.processed_data[final_xray_mask] = np.nan
 
     def filter_xray_spots(self, 
                          chunk_size: int = 64,
@@ -299,10 +348,7 @@ class EMCCDimage:
                 intensity = self.raw_data[row, col]
                 print(f"  Position: ({row}, {col}), Intensity: {intensity:.1f}")
 
-    def remove_background(self, background: np.ndarray,
-                                 chunk_size: int = 32,
-                                 sigma_threshold: float = 29.6,
-                                 beam_threshold: float = 300) -> None:
+    def remove_background_legacy(self, background: np.ndarray) -> None:
         """
         Subtract background from raw_data to produce processed_data.
         
@@ -313,8 +359,26 @@ class EMCCDimage:
         """
 
         self.processed_data = self.raw_data - background
-        self.filter_xray_spots_inplace(chunk_size, sigma_threshold, beam_threshold)
+        #self.filter_xray_spots_inplace(chunk_size, sigma_threshold, beam_threshold)
     
+    def remove_background(self, 
+                          background: np.ndarray,
+                          median_array: np.ndarray,
+                          mad_array: np.ndarray,
+                          sigma_threshold: float = 29.6,
+                          expansion_threshold_ratio: float = 0.7):
+        '''
+        Subtract background from raw_data AND filter Xray to produce processed_data.
+        
+        Parameters:
+        -----------
+        background : np.ndarray
+            Background image to subtract from raw_data
+        '''
+
+        self.processed_data = self.raw_data - background
+        self.filter_xray_optimized(median_array, mad_array, sigma_threshold, expansion_threshold_ratio)
+
     def get_processed_data(self) -> np.ndarray:
         """
         Get the processed data after background removal.
