@@ -20,16 +20,12 @@ def plot_ndarray(Bkg: np.ndarray,Vmin,Vmax):
     plt.tight_layout()
     plt.show()
 
-def plot_azimuthal_average(data, 
-                              radius: float = 300,
-                              num_bins: int = 300) -> None:
+def plot_azimuthal_average(radii, intensities) -> None:
         """
         Plot the azimuthal average.
         """
         try:
             import matplotlib.pyplot as plt
-            
-            radii, intensities = data.azimuthal_average(radius, num_bins)
             
             plt.figure(figsize=(10, 6))
             plt.plot(radii, intensities, 'b-', linewidth=2, label='Azimuthal Average')

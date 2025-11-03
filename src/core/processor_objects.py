@@ -8,6 +8,7 @@ import logging
 from src.core.tiff_objects import EMCCDimage
 from src.io.tiff_import import TiffLoader
 from src.utils.timer import timer
+from src.io.quick_plot import plot_azimuthal_average, plot_ndarray
 
 class XPSGroupProcessor:
     def __init__(self, 
@@ -192,6 +193,74 @@ class XPSGroupProcessor:
             self.logger.error(f"Failed to process {filepath}: {str(e)}")
             self.failed_files.append((filepath, str(e)))
             return None
+
+    def process_single_debug(self, filepath: str, plot_min: float = None, plot_max: float = None) -> None:
+        """
+        Debug version: Process a single image file with extensive plotting and printing.
+        
+        Args:
+            filepath: Path to the image file
+            plot_min: Minimum value for plot display (optional)
+            plot_max: Maximum value for plot display (optional)
+        """
+        try:
+            print(f"\n{'='*60}")
+            print(f"DEBUG PROCESSING: {Path(filepath).name}")
+            print(f"{'='*60}")
+            
+            # Load image file
+            image_file = EMCCDimage(TiffLoader(Path(filepath).parent, Path(filepath).name))
+            
+            # Plot original data before background removal
+            print(f"\n1. ORIGINAL DATA:")
+            print(f"Data range: [{np.nanmin(image_file.processed_data):.3f}, {np.nanmax(image_file.processed_data):.3f}]")
+            plot_ndarray(image_file.processed_data, plot_min, plot_max)
+
+            # Remove background
+            print(f"\n2. BACKGROUND REMOVAL:")
+            image_file.remove_background(
+                self.background_data,
+                self.X_ray_precompute[0],  # median_array
+                self.X_ray_precompute[1],  # mad_array
+                self.X_ray_config[0],  # sigma_threshold
+                self.X_ray_config[1]   # expansion_threshold_ratio
+            )
+            
+            # Plot after background removal
+            print(f"After background removal:")
+            print(f"Data range: [{np.nanmin(image_file.processed_data):.3f}, {np.nanmax(image_file.processed_data):.3f}]")
+            print(f"NaN count: {np.sum(np.isnan(image_file.processed_data))}")
+            plot_ndarray(image_file.processed_data, plot_min, plot_max)
+
+            # Find diffraction center
+            print(f"\n3. CENTER FINDING:")
+            center = image_file.iterative_ring_centroid(
+                self.center_config[0],  # ring_mask
+                self.center_config[1]   # initial_guess
+            )
+            print(f"Found center: ({center[0]:.2f}, {center[1]:.2f})")
+            print(f"Total count: {image_file.total_count:.2f}")
+
+            # Calculate azimuthal average
+            print(f"\n4. AZIMUTHAL AVERAGE:")
+            bin_centers, radial_average = image_file.azimuthal_average_bincount(
+                self.azimuthal_config[0],  # radial_masks
+                self.azimuthal_config[1]   # azimuthal_mask dict
+            )
+            
+            # Plot radial average
+            print(f"Radial profile range: [{np.nanmin(radial_average):.3f}, {np.nanmax(radial_average):.3f}]")
+            print(f"Non-NaN bins: {np.sum(~np.isnan(radial_average))}/{len(radial_average)}")
+            plot_azimuthal_average(bin_centers, radial_average)
+            
+            print(f"\n✓ SUCCESSFULLY PROCESSED: {Path(filepath).name}")
+            print(f"{'='*60}")
+
+        except Exception as e:
+            print(f"\n✗ FAILED TO PROCESS {filepath}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            self.failed_files.append((filepath, str(e)))
 
     def process_group(self, batch_size: int = 100) -> None:
         """

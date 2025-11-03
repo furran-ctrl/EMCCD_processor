@@ -142,6 +142,58 @@ class DirectoryProcessor:
             print(f"XPS {xps_value:.5f}: {len(files)} files")
         print(f"\nTotal: {len(self.merged_groups)} XPS groups")
 
+    def select_test_xps_group(self) -> None:
+        """
+        Select the longest XPS group for testing without merging.
+        Let user confirm before setting it as self.merged_groups.
+        """
+        self.logger.info("Selecting test XPS group (longest group)...")
+        
+        # Group files by XPS value
+        groups_with_xps = group_tiff_files_with_info(self.data_directory)
+        
+        if not groups_with_xps:
+            raise ValueError("No XPS groups found in the data directory")
+        
+        # Find the group with the most files
+        longest_group = max(groups_with_xps, key=lambda x: len(x[1]))
+        xps_value, file_list = longest_group
+        
+        # Display information to user
+        print(f"\n{'=' * 50}")
+        print("TEST XPS GROUP SELECTION")
+        print(f"{'=' * 50}")
+        print(f"Selected group: XPS {xps_value:.5f}")
+        print(f"Number of files: {len(file_list)}")
+        print(f"File examples:")
+        for i, filepath in enumerate(file_list[:5]):  # Show first 5 files
+            print(f"  {Path(filepath).name}")
+        if len(file_list) > 5:
+            print(f"  ... and {len(file_list) - 5} more files")
+        print(f"{'=' * 50}")
+        
+        # Get user confirmation
+        while True:
+            response = input("\nUse this group for testing? (y/n): ").strip().lower()
+            if response in ['y', 'yes']:
+                # Set as the only group in merged_groups
+                self.merged_groups = [longest_group]
+                self.logger.info(f"Test group set: XPS {xps_value:.5f} with {len(file_list)} files")
+                
+                # Also display other available groups for reference
+                print(f"\nOther available XPS groups:")
+                print(f"{'-' * 30}")
+                for other_xps, other_files in groups_with_xps:
+                    if other_xps != xps_value:
+                        print(f"XPS {other_xps:.5f}: {len(other_files)} files")
+                break
+            elif response in ['n', 'no']:
+                self.logger.info("User declined to use the test group")
+                self.merged_groups = []
+                break
+            else:
+                print("Please enter 'y' or 'n'")
+
     def process_xps_group(self, xps_group: Tuple[float, List[str]], analyze_no: str) -> None:
         """
         Process a single XPS group.
@@ -315,7 +367,6 @@ class DirectoryProcessor:
         
         self.logger.info(f"Configuration loaded from {config_path}")
 
-
 '''
 define a class DirectoryProcessor to sort and process the files under result directory:
 the class shoud have self variables:
@@ -369,3 +420,4 @@ load_config(analyze_no): load the parameters required upon initializing from res
 also define a seperate function and dataclass outside of the class to save all the parameters 
     required upon initializing to result_directory/analyze_no/config.csv
 '''
+#xps format needs to be updated for background scans
