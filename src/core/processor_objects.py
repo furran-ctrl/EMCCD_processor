@@ -194,7 +194,8 @@ class XPSGroupProcessor:
             self.failed_files.append((filepath, str(e)))
             return None
 
-    def process_single_debug(self, filepath: str, plot_min: float = None, plot_max: float = None) -> None:
+    def process_single_debug(self, filepath: str, plot_min_raw: float = None, plot_max_raw: float = None,
+                             plot_min: float = None, plot_max: float = None) -> None:
         """
         Debug version: Process a single image file with extensive plotting and printing.
         
@@ -206,6 +207,7 @@ class XPSGroupProcessor:
         try:
             print(f"\n{'='*60}")
             print(f"DEBUG PROCESSING: {Path(filepath).name}")
+            print(f"Under:{Path(filepath).parent}")
             print(f"{'='*60}")
             
             # Load image file
@@ -213,8 +215,8 @@ class XPSGroupProcessor:
             
             # Plot original data before background removal
             print(f"\n1. ORIGINAL DATA:")
-            print(f"Data range: [{np.nanmin(image_file.processed_data):.3f}, {np.nanmax(image_file.processed_data):.3f}]")
-            plot_ndarray(image_file.processed_data, plot_min, plot_max)
+            print(f"Data range: [{np.nanmin(image_file.raw_data):.3f}, {np.nanmax(image_file.raw_data):.3f}]")
+            plot_ndarray(image_file.raw_data, plot_min_raw, plot_max_raw)
 
             # Remove background
             print(f"\n2. BACKGROUND REMOVAL:")
@@ -234,7 +236,7 @@ class XPSGroupProcessor:
 
             # Find diffraction center
             print(f"\n3. CENTER FINDING:")
-            center = image_file.iterative_ring_centroid(
+            center = image_file.ring_centroid_debug(
                 self.center_config[0],  # ring_mask
                 self.center_config[1]   # initial_guess
             )

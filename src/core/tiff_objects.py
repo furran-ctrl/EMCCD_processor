@@ -615,6 +615,32 @@ class EMCCDimage:
         self.center_pos = self.ring_centroid(ring_mask, current_center, save_total_count=True)
         return self.center_pos
     
+    def ring_centroid_debug(self,
+                           ring_mask: RingMask,
+                           initial_guess: Tuple[float, float],
+                           max_iter: int = 10,
+                           tolerance: float = 1.0) -> Tuple[float, float]:
+        """
+        Debug version of iterative_ring_centroid.
+        """
+        current_center = initial_guess
+        
+        for iteration in range(max_iter):
+            
+            print(f"Current guess: {current_center}")
+            new_center = self.ring_centroid(ring_mask, current_center)
+            # Check convergence
+            shift_distance = np.sqrt((new_center[0] - current_center[0])**2 + 
+                                    (new_center[1] - current_center[1])**2)
+            print(f"Iteration {iteration+1}: Center shift = {shift_distance:.3f} pixels")
+
+            current_center = new_center
+            if shift_distance < tolerance:
+                break
+        
+        self.center_pos = self.ring_centroid(ring_mask, current_center, save_total_count=True)
+        return self.center_pos
+    
     def azimuthal_average_bincount(self, 
                       radial_masks: RadialMasks,
                       precomputed_masks: dict) -> Tuple[np.ndarray, np.ndarray]:
