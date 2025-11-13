@@ -9,10 +9,12 @@ from src.core.tiff_objects import EMCCDimage
 from src.io.tiff_import import TiffLoader
 from src.utils.timer import timer
 from src.io.quick_plot import plot_azimuthal_average, plot_ndarray
+from src.core.reslut_class import ProcessedResult, HDF5DataStore
 
 class XPSGroupProcessor:
     def __init__(self, 
                  background_data: np.ndarray,
+                 data_mask_data: np.ndarray,
                  X_ray_config: List,
                  center_config: List,
                  azimuthal_config: List,
@@ -24,6 +26,7 @@ class XPSGroupProcessor:
         
         Args:
             background_data: Background data for subtraction
+            data_mask_data: Data mask for masking area of valid signal
             X_ray_config: [sigma_threshold, expansion_threshold_ratio]
             center_config: [ring_mask, initial_guess]
             azimuthal_config: [radial_masks, azimuthal_mask_dict]
@@ -32,6 +35,7 @@ class XPSGroupProcessor:
             resultdir: Directory to save results
         """
         self.background_data = background_data
+        self.data_mask_data = data_mask_data
         self.X_ray_config = X_ray_config  # [sigma_threshold, expansion_threshold_ratio]
         self.center_config = center_config  # [ring_mask, initial_guess]
         self.azimuthal_config = azimuthal_config  # [radial_masks, azimuthal_mask_dict]
@@ -163,6 +167,9 @@ class XPSGroupProcessor:
                 self.X_ray_config[1]   # expansion_threshold_ratio
             )
 
+            # Masking valid signal
+            image_file.apply_data_mask(self.data_mask_data)
+
             # Find diffraction center
             #with timer('center_finding'):
             center = image_file.iterative_ring_centroid(
@@ -264,7 +271,7 @@ class XPSGroupProcessor:
             traceback.print_exc()
             self.failed_files.append((filepath, str(e)))
 
-    def process_group(self, batch_size: int = 100) -> None:
+    def process_group(self, batch_size: int = 500) -> None:
         """
         Process all files in the filelist.
         
@@ -316,7 +323,7 @@ class XPSGroupProcessor:
             # Save failed files list
             self.save_failed_files()
 
-    def save_results(self, results: List['ProcessedResult'], batch_number: int = None) -> None:
+    def save_results_csv(self, results: List['ProcessedResult'], batch_number: int = None) -> None:
         """
         Save results to CSV file.
         
@@ -349,12 +356,28 @@ class XPSGroupProcessor:
         
         # Generate filename
         if batch_number is not None:
-            filename = self.resultdir / f"results_batch_{batch_number:03d}.csv"
+            filename = self.resultdir / f"results_batch_{batch_number:03d}_{time.strftime('%H%M')}.csv"
         else:
-            filename = self.resultdir / "results_final.csv"
+            filename = self.resultdir / f"results_final_{time.strftime('%H%M')}.csv"
         
         # Save to CSV
         df.to_csv(filename, index=False)
+        self.logger.info(f"Saved {len(results)} results to {filename}")
+
+    def save_results(self, results: List['ProcessedResult'], batch_number: int = None) -> None:
+        """Save results to HDF5 file, currently implemented."""
+        if not results:
+            return
+        
+        # Generate filename
+        if batch_number is not None:
+            filename = self.resultdir / f"results_batch_{batch_number:03d}_{time.strftime('%H%M')}.h5"
+        else:
+            filename = self.resultdir / f"xps_{self.xps_value:.5f}_results_{time.strftime('%H%M')}.h5"
+        
+        # Save using HDF5
+        store = HDF5DataStore(str(filename))
+        store.save_results(results)
         self.logger.info(f"Saved {len(results)} results to {filename}")
 
     def save_failed_files(self) -> None:
@@ -385,21 +408,6 @@ class XPSGroupProcessor:
             'mean_total_count': np.mean(total_counts),
             'std_total_count': np.std(total_counts),
         }
-
-
-class ProcessedResult:
-    """Container for processed image results."""
-    def __init__(self, 
-                 filename: str,
-                 center: Tuple[float, float],
-                 total_count: float,
-                 radial_profile: np.ndarray,
-                 xps_value: float):
-        self.filename = filename
-        self.center = center
-        self.total_count = total_count
-        self.radial_profile = radial_profile
-        self.xps_value = xps_value
 
 '''
 define a class:XPSGroupProcessor for processsing large batch of image:

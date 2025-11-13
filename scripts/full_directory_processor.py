@@ -18,30 +18,35 @@ class DirectoryProcessor:
     def __init__(self,
                  result_directory: str,
                  data_directory:str,
-                 background_directory: str,
                  xps_grouping_param: List[float],
                  xray_removal_param: List[float],
                  center_fitting_param: List[float],
-                 azimuthal_avg_param: List[float]):
+                 azimuthal_avg_param: List[float],
+                 background_directory: str = 'default',
+                 data_mask_directory: str = 'default'):
         """
         Initialize Directory Processor for sorting and processing files.
         
         Args:
             result_directory: Directory for containing results 
             data_directory: Directory containing data for processing
-            background_directory: Directory for background files or 'default'
             xps_grouping_param: [threshold, tolerance] for XPS grouping
             xray_removal_param: [sigma_threshold, expansion_threshold_ratio]
             center_fitting_param: [inner_radius, outer_radius, center_x, center_y]
             azimuthal_avg_param: [radius, num_bins]
+            background_directory: Directory for background file or 'default'
+            data_mask_directory: Directory for data mask or 'default'
+                if empty, processor will use skip masking the data.
         """
         self.result_directory = Path(result_directory)
-        self.background_directory = background_directory
-        self.background_data = None
         self.xps_grouping_param = xps_grouping_param
         self.xray_removal_param = xray_removal_param
         self.center_fitting_param = center_fitting_param
         self.azimuthal_avg_param = azimuthal_avg_param
+        self.background_directory = background_directory
+        self.background_data = None
+        self.data_mask_directory = data_mask_directory
+        self.data_mask_data = None
         
         # Initialize empty configs
         self.center_config = []  # [ring_mask, initial_guess]
@@ -88,17 +93,17 @@ class DirectoryProcessor:
         
         self.logger.info("Masks initialized successfully")
 
-    def initialize_background(self) -> None:
+    def initialize_bkg_and_datamask(self) -> None:
         """
-        Initialize background data from specified directory.
+        Initialize background data (and now data mask too!) from specified directory.
         """
-        self.logger.info("Initializing background data...")
+        self.logger.info("Initializing background and data mask...")
         
         if self.background_directory == 'default':
             # Load from result_directory/background.tiff
             background_path = self.result_directory / "background.tiff"
             if not background_path.exists():
-                raise FileNotFoundError(f"Default background file not found: {background_path}")
+                raise FileNotFoundError(f"Default background file not found under: {background_path}")
             
             self.background_data = TiffLoader(background_path.parent, background_path.name)
             self.logger.info(f"Loaded background from: {background_path}")
@@ -116,16 +121,39 @@ class DirectoryProcessor:
             self.background_data = TiffLoader(background_file.parent, background_file.name)
             self.logger.info(f"Loaded background from: {background_file}")
 
+        if self.data_mask_directory == 'default':
+            # Same logic to load data_mask
+            data_mask_path = self.result_directory / "data_mask.tiff"
+            if not data_mask_path.exists():
+                self.logger.info(f"Default data mask file not found under: {background_path}, proceed without masking!")
+                self.data_mask_data = np.ones((1024, 1024), dtype=int)
+            else:
+                self.data_mask_data = TiffLoader(data_mask_path.parent, data_mask_path.name)
+                self.logger.info(f"Loaded data_mask from: {data_mask_path}")
+        
+        else:
+            data_mask_dir = Path(self.data_mask_directory)
+            tiff_files = list(data_mask_dir.glob("*.tiff")) + list(data_mask_dir.glob("*.tif"))
+            
+            if not tiff_files:
+                self.logger.info(f"No TIFF files found in data_mask directory: {background_dir}, proceed without masking!")
+                self.data_mask_data = np.ones((1024, 1024), dtype=int)
+            else:
+                data_mask_file = tiff_files[0]
+                self.data_mask_data = TiffLoader(data_mask_file.parent, data_mask_file.name)
+                self.logger.info(f"Loaded data_mask from: {data_mask_file}")
+
     def sort_file_into_xpsgroups(self) -> None:
         """
-        Sort files into XPS groups and merge similar groups.
+        Sort files into XPS groups and (used to but no longer)merge similar groups.
         """
         self.logger.info("Sorting files into XPS groups...")
         
-        # Group files by XPS value
+        # Group files by XPS value, now set to be self.merged_groups without merging
         groups_with_xps = group_tiff_files_with_info(self.data_directory)
+        self.merged_groups = groups_with_xps
         
-        # Extract threshold and tolerance
+        '''# Extract threshold and tolerance
         threshold, tolerance = self.xps_grouping_param
         
         # Merge similar XPS groups
@@ -133,7 +161,7 @@ class DirectoryProcessor:
             groups_with_xps, 
             threshold=threshold, 
             tolerance=tolerance
-        )
+        )'''
         
         # Display group information
         print(f"\nXPS Groups Summary:")
@@ -218,6 +246,7 @@ class DirectoryProcessor:
         # Initialize and run XPSGroupProcessor
         processor = XPSGroupProcessor(
             background_data=self.background_data,
+            data_mask_data=self.data_mask_data,
             X_ray_config=self.xray_removal_param,
             center_config=self.center_config,
             azimuthal_config=self.azimuthal_config,
@@ -241,8 +270,8 @@ class DirectoryProcessor:
         # Ensure masks and background are initialized
         if not self.center_config or not self.azimuthal_config:
             self.initialize_masks()
-        if self.background_data is None:
-            self.initialize_background()
+        if self.background_data is None or self.data_mask_data is None:
+            self.initialize_bkg_and_datamask()
         
         # Sort files if not already sorted
         if not self.merged_groups:
@@ -274,8 +303,8 @@ class DirectoryProcessor:
         # Ensure masks and background are initialized
         if not self.center_config or not self.azimuthal_config:
             self.initialize_masks()
-        if self.background_data is None:
-            self.initialize_background()
+        if self.background_data is None or self.data_mask_data is None:
+            self.initialize_bkg_and_datamask()
         
         # Sort files if not already sorted
         if not self.merged_groups:
@@ -319,6 +348,7 @@ class DirectoryProcessor:
         config = ProcessingConfig(
             result_directory=str(self.result_directory),
             background_directory=self.background_directory,
+            data_mask_directory=self.data_mask_directory,
             xps_grouping_param=self.xps_grouping_param,
             xray_removal_param=self.xray_removal_param,
             center_fitting_param=self.center_fitting_param,
@@ -356,6 +386,7 @@ class DirectoryProcessor:
         # Update instance variables
         self.result_directory = Path(config_dict['result_directory'])
         self.background_directory = config_dict['background_directory']
+        self.data_mask_directory = config_dict['data_mask_directory']
         self.xps_grouping_param = eval(config_dict['xps_grouping_param']) if isinstance(config_dict['xps_grouping_param'], str) else config_dict['xps_grouping_param']
         self.xray_removal_param = eval(config_dict['xray_removal_param']) if isinstance(config_dict['xray_removal_param'], str) else config_dict['xray_removal_param']
         self.center_fitting_param = eval(config_dict['center_fitting_param']) if isinstance(config_dict['center_fitting_param'], str) else config_dict['center_fitting_param']
@@ -363,7 +394,7 @@ class DirectoryProcessor:
         
         # Reinitialize masks with loaded parameters
         self.initialize_masks()
-        self.initialize_background()
+        self.initialize_bkg_and_datamask()
         
         self.logger.info(f"Configuration loaded from {config_path}")
 

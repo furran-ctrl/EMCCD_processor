@@ -374,10 +374,25 @@ class EMCCDimage:
         -----------
         background : np.ndarray
             Background image to subtract from raw_data
+        median_array: Precomputed median values for each pixel
+        mad_array: Precomputed MAD values for each pixel  
+        sigma_threshold: Threshold for identifying X-ray hits
+        expansion_threshold_ratio: Ratio for expanding X-ray region detection
         '''
-
         self.processed_data = self.raw_data - background
         self.filter_xray_optimized(median_array, mad_array, sigma_threshold, expansion_threshold_ratio)
+
+    def apply_data_mask(self, data_mask: np.ndarray) -> None:
+        '''
+        Apply the data_mask (1 to keep, 0 to discard) to processed_data. 
+        
+        Parameters:
+        -----------
+        data_mask : np.ndarray
+            Mask to remove noise/area without signal
+        '''
+        condition = data_mask == 1
+        self.processed_data = np.where(condition, self.processed_data, np.nan)
 
     def get_processed_data(self) -> np.ndarray:
         """
