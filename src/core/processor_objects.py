@@ -241,8 +241,17 @@ class XPSGroupProcessor:
             print(f"NaN count: {np.sum(np.isnan(image_file.processed_data))}")
             plot_ndarray(image_file.processed_data, plot_min, plot_max)
 
+            # Masking valid signal
+            print(f"\n3. MASKING DATA:")
+            image_file.apply_data_mask(self.data_mask_data)
+
+            # Plot after masking
+            print(f"After data masking:")
+            print(f"Data range: [{np.nanmin(image_file.processed_data):.3f}, {np.nanmax(image_file.processed_data):.3f}]")
+            plot_ndarray(image_file.processed_data, plot_min, plot_max)
+
             # Find diffraction center
-            print(f"\n3. CENTER FINDING:")
+            print(f"\n4. CENTER FINDING:")
             center = image_file.ring_centroid_debug(
                 self.center_config[0],  # ring_mask
                 self.center_config[1]   # initial_guess
@@ -251,7 +260,7 @@ class XPSGroupProcessor:
             print(f"Total count: {image_file.total_count:.2f}")
 
             # Calculate azimuthal average
-            print(f"\n4. AZIMUTHAL AVERAGE:")
+            print(f"\n5. AZIMUTHAL AVERAGE:")
             bin_centers, radial_average = image_file.azimuthal_average_bincount(
                 self.azimuthal_config[0],  # radial_masks
                 self.azimuthal_config[1]   # azimuthal_mask dict
@@ -322,6 +331,37 @@ class XPSGroupProcessor:
             self.logger.warning(f"Failed files: {len(self.failed_files)}")
             # Save failed files list
             self.save_failed_files()
+
+    def preprocess_test_group(self) -> np.ndarray:
+        '''
+        Preprocessing function for determining the data_mask, intended for test group only!
+        '''
+        self.logger.info(f"Preprocessing test group - computing mean of {len(self.filelist)} images")
+    
+        # Precompute X-ray statistics
+        self.precompute_xray_statistics()
+
+        all_processed_data = []
+        for i, filepath in enumerate(self.filelist):
+            # Load and process image
+            image_file = EMCCDimage(TiffLoader(Path(filepath).parent, Path(filepath).name))
+            image_file.remove_background(
+                self.background_data,
+                self.X_ray_precompute[0],
+                self.X_ray_precompute[1],
+                self.X_ray_config[0],
+                self.X_ray_config[1]
+            )
+            
+            file_data = image_file.get_processed_data()
+            all_processed_data.append(file_data)
+        
+        # Compute mean
+        image_stack = np.stack(all_processed_data, axis=0)
+        mean_image = np.mean(image_stack, axis=0)
+        
+        print(f"✓ Mean image computed from {len(all_processed_data)} images")
+        return mean_image
 
     def save_results_csv(self, results: List['ProcessedResult'], batch_number: int = None) -> None:
         """

@@ -222,6 +222,67 @@ class DirectoryProcessor:
             else:
                 print("Please enter 'y' or 'n'")
 
+    def select_test_xps_group_numbered(self, group_size: int = 50) -> List[Tuple[float, List[str]]]:
+        """
+        Alternative version with numbered selection as well as truncated group length.
+        """
+        self.logger.info("Numbered test XPS group selection...")
+        
+        # Group files by XPS value
+        groups_with_xps = group_tiff_files_with_info(self.data_directory)
+        
+        if not groups_with_xps:
+            raise ValueError("No XPS groups found in the data directory")
+        
+        # Sort groups by file count (descending)
+        sorted_groups = sorted(groups_with_xps, key=lambda x: len(x[1]), reverse=True)
+        
+        print(f"\n{'=' * 60}")
+        print("SELECT TEST XPS GROUP")
+        print(f"{'=' * 60}")
+        
+        # Display all groups with numbers
+        for i, (xps_value, file_list) in enumerate(sorted_groups, 1):
+            print(f"{i:2d}. XPS {xps_value:.5f}: {len(file_list):4d} files")
+        
+        print(f"{'=' * 60}")
+        
+        # User selection
+        while True:
+            try:
+                choice = input(f"\nEnter group number (1-{len(sorted_groups)}) or 'q' to quit: ").strip().lower()
+                
+                if choice in ['q', 'quit']:
+                    print("No group selected.")
+                    self.merged_groups = []
+                    break
+                    
+                choice_num = int(choice)
+                if 1 <= choice_num <= len(sorted_groups):
+                    selected_group = sorted_groups[choice_num - 1]
+                    xps_value, file_list = selected_group
+                    print(f"✓ Selected group {choice_num}: XPS {xps_value:.5f} with {len(file_list)} files")
+                    self.merged_groups = [selected_group]
+
+                    #select group_size of evenly spaced files
+                    selected_xps, original_file_list = selected_group
+        
+                    if len(original_file_list) > group_size:
+                        # Select max_files evenly spaced files
+                        indices = np.linspace(0, len(original_file_list) - 1, group_size, dtype=int)
+                        final_file_list = [original_file_list[i] for i in indices]
+                        self.merged_groups = [(selected_xps, final_file_list)]
+                        print(f"Limited to {group_size} evenly spaced files (from {len(original_file_list)} total)")
+                    else:
+                        print("Truncation failed due to group_size bigger than selected group, proceed without truncation.")
+                    return self.merged_groups
+                    
+                else:
+                    print(f"Please enter a number between 1 and {len(sorted_groups)}")
+                    
+            except ValueError:
+                print("Please enter a valid number or 'q' to quit")
+
     def process_xps_group(self, xps_group: Tuple[float, List[str]], analyze_no: str) -> None:
         """
         Process a single XPS group.
@@ -333,6 +394,44 @@ class DirectoryProcessor:
                     self.logger.error(f"Failed to process group {xps_val:.2f}: {str(e)}")
         
         self.logger.info("Parallel processing completed")
+
+    def preprocess_screening(self, group_size: int) -> np.ndarray:
+        """
+        Process XPS groups in parallel.
+        
+        Args:
+            max_workers: Maximum number of parallel threads
+            analyze_no: Analysis number for organizing results
+        """
+        self.logger.info(f"Starting preprocess screening with {group_size} images")
+        
+        # Ensure masks and background are initialized
+        if not self.center_config or not self.azimuthal_config:
+            self.initialize_masks()
+        if self.background_data is None or self.data_mask_data is None:
+            self.initialize_bkg_and_datamask()
+        
+        # Call select_test_xps_group_numbered to get test group
+        if not self.merged_groups:
+            self.select_test_xps_group_numbered(group_size)
+        
+        # Save config before processing
+        self.save_config("preprocessing_screening_config")
+
+        # Extract values from test group
+        xps_value, filelist = self.merged_groups[0]
+
+        preprocessor = XPSGroupProcessor(
+            background_data=self.background_data,
+            data_mask_data=self.data_mask_data,
+            X_ray_config=self.xray_removal_param,
+            center_config=self.center_config,
+            azimuthal_config=self.azimuthal_config,
+            xps_value=xps_value,
+            filelist=filelist,
+            resultdir=''
+        )
+        return preprocessor.preprocess_test_group()
 
     def save_config(self, analyze_no: str) -> None:
         """
