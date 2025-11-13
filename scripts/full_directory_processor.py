@@ -316,7 +316,7 @@ class DirectoryProcessor:
             resultdir=str(group_result_dir)
         )
         
-        processor.process_group(batch_size=100)
+        processor.process_group(batch_size=500)
         self.logger.info(f"Completed processing XPS group {xps_value:.5f}")
 
     def process_in_sequence(self, analyze_no: str) -> None:

@@ -289,38 +289,32 @@ class XPSGroupProcessor:
         """
         total_files = len(self.filelist)
         self.logger.info(f"Starting batch processing of {total_files} files")
-        
+
         start_time = time.time()
         batch_results = []
         
         # Precompute X-ray statistics once for the entire group
         self.precompute_xray_statistics()
 
-        for i, filepath in enumerate(self.filelist, 1):
-            # Process single file
-            #with timer('single'):
-            result = self.process_single(filepath)
+        for batch_num, i in enumerate(range(0, total_files, batch_size)):
+            batch_files = self.filelist[i:i + batch_size]
+            batch_results = []
             
-            if result is not None:
-                self.results.append(result)
-                batch_results.append(result)
-                self.processed_files += 1
+            for filepath in batch_files:
+                result = self.process_single(filepath)
+                if result is not None:
+                    batch_results.append(result)
+                    self.processed_files += 1
             
-            # Print progress and save every batch_size files
-            if i % batch_size == 0 or i == total_files:
-                batch_time = time.time() - start_time
-                self.logger.info(f"Processed {i}/{total_files} files. "
-                               f"Batch time: {batch_time:.2f} seconds. "
-                               f"Success rate: {self.processed_files}/{i} "
-                               f"({self.processed_files/i*100:.1f}%)")
-                
-                # Save current batch results
-                if batch_results:
-                    self.save_results(batch_results, batch_number=i//batch_size)
-                    batch_results = []  # Clear batch results after saving
-                
-                # Reset timer for next batch
-                start_time = time.time()
+            # Save batch to the same Parquet file
+            if batch_results:
+                self.save_results(batch_results, batch_number=batch_num)
+            
+            batch_time = time.time() - start_time
+            self.logger.info(f"Completed batch {batch_num} in {batch_time:.2f} seconds."
+                             f"{len(batch_results)}/{len(batch_files)} successful")
+            # Reset timer for next batch
+            start_time = time.time()
         
         # Final summary
         self.logger.info(f"Processing completed. "
@@ -404,7 +398,7 @@ class XPSGroupProcessor:
         df.to_csv(filename, index=False)
         self.logger.info(f"Saved {len(results)} results to {filename}")
 
-    def save_results(self, results: List['ProcessedResult'], batch_number: int = None) -> None:
+    def save_results_hdf5(self, results: List['ProcessedResult'], batch_number: int = None) -> None:
         """Save results to HDF5 file, currently implemented."""
         if not results:
             return
@@ -420,6 +414,35 @@ class XPSGroupProcessor:
         store.save_results(results)
         self.logger.info(f"Saved {len(results)} results to {filename}")
 
+    def save_results(self, results: List['ProcessedResult'], batch_number: int = None) -> None:
+        """Save results to one Parquet file."""
+        data = []
+        for result in results:
+            row = {
+                'filename': result.filename,
+                'center_x': result.center[0],
+                'center_y': result.center[1], 
+                'total_count': result.total_count,
+                'xps_value': result.xps_value
+            }
+            # Add radial bins
+            for i, intensity in enumerate(result.radial_profile):
+                row[f'radial_bin_{i:03d}'] = intensity
+            data.append(row)
+        
+        new_df = pd.DataFrame(data)
+        filename = self.resultdir / f"xps_{self.xps_value:.5f}.parquet"
+        if filename.exists():
+            # Read existing file and append
+            existing_df = pd.read_parquet(filename)
+            combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+            combined_df.to_parquet(filename, index=False, compression='snappy')
+            self.logger.info(f"Appended batch {batch_number} with {len(results)} files (total: {len(combined_df)})")
+        else:
+            # Create new file
+            new_df.to_parquet(filename, index=False, compression='snappy')
+            self.logger.info(f"Created new file with batch {batch_number} ({len(results)} files)")
+
     def save_failed_files(self) -> None:
         """Save list of failed files with error messages."""
         if not self.failed_files:
@@ -431,7 +454,7 @@ class XPSGroupProcessor:
         self.logger.info(f"Saved {len(self.failed_files)} failed files to {failed_filepath}")
 
     def get_summary_stats(self) -> Dict:
-        """Get summary statistics of processing."""
+        """Get summary statistics of processing, no longer active as self.results is empty."""
         if not self.results:
             return {}
         
