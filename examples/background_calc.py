@@ -7,7 +7,7 @@ from src.core.bkg_objects import CrudeBackground, CalcBackground
 from src.io.quick_plot import plot_ndarray
 from src.io.result_save import save_as_tiff
 
-Bkgtestdir = r"C:\Users\86177\Desktop\test_file\bkg_100"
+Bkgtestdir = r"E:\20250810\1_BKG_IRON_BEAMOFF_SHEETON\fist_AndorEMCCD"
 #directory for background .tiffs
 '''
 OldBkg = CrudeBackground(Bkgtestdir)
@@ -19,6 +19,6 @@ NewBkg = CalcBackground(Bkgtestdir)
 FineBkg = NewBkg.process_background(chunk_size= 32, sigma_threshold= 22, beam_threshold= 1000)
 
 plot_ndarray(FineBkg, 420, 650)
-Bkgdir = r'C:\Users\86177\Desktop\results\background'
+Bkgdir = r'C:\Users\86177\Desktop\results\0809\background'
 #directory under the related processing folder
 save_as_tiff(FineBkg, Bkgdir)

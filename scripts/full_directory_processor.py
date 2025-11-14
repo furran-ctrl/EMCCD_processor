@@ -124,12 +124,17 @@ class DirectoryProcessor:
         if self.data_mask_directory == 'default':
             # Same logic to load data_mask
             data_mask_path = self.result_directory / "data_mask.tiff"
+            background_mask_path = self.result_directory / "background_mask.tiff"
             if not data_mask_path.exists():
                 self.logger.info(f"Default data mask file not found under: {background_path}, proceed without masking!")
-                self.data_mask_data = np.ones((1024, 1024), dtype=int)
+                background_mask = np.zeros((1024, 1024), dtype=int)
+                background_mask[20:1024-20, :] = 1
+                background_mask[:, 20:1024-20] = 1
+                self.data_mask_data = [np.ones((1024, 1024), dtype=int),background_mask] 
             else:
-                self.data_mask_data = TiffLoader(data_mask_path.parent, data_mask_path.name)
-                self.logger.info(f"Loaded data_mask from: {data_mask_path}")
+                self.data_mask_data = [TiffLoader(data_mask_path.parent, data_mask_path.name),
+                                       TiffLoader(background_mask_path.parent, background_mask_path.name)]
+                self.logger.info(f"Loaded data_mask from: {self.result_directory}")
         
         else:
             data_mask_dir = Path(self.data_mask_directory)
@@ -137,8 +142,12 @@ class DirectoryProcessor:
             
             if not tiff_files:
                 self.logger.info(f"No TIFF files found in data_mask directory: {background_dir}, proceed without masking!")
-                self.data_mask_data = np.ones((1024, 1024), dtype=int)
+                background_mask = np.zeros((1024, 1024), dtype=int)
+                background_mask[20:1024-20, :] = 1
+                background_mask[:, 20:1024-20] = 1
+                self.data_mask_data = [np.ones((1024, 1024), dtype=int),background_mask]
             else:
+                #needs fixing!
                 data_mask_file = tiff_files[0]
                 self.data_mask_data = TiffLoader(data_mask_file.parent, data_mask_file.name)
                 self.logger.info(f"Loaded data_mask from: {data_mask_file}")

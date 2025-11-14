@@ -382,16 +382,20 @@ class EMCCDimage:
         self.processed_data = self.raw_data - background
         self.filter_xray_optimized(median_array, mad_array, sigma_threshold, expansion_threshold_ratio)
 
-    def apply_data_mask(self, data_mask: np.ndarray) -> None:
+    def apply_data_mask(self, data_mask: List[np.ndarray]) -> None:
         '''
         Apply the data_mask (1 to keep, 0 to discard) to processed_data. 
         
         Parameters:
         -----------
         data_mask : np.ndarray
-            Mask to remove noise/area without signal
+            Mask to remove background drift and noise/area without signal
         '''
-        condition = data_mask == 1
+        #removing background drift
+        background_mean = np.nanmean(self.processed_data[data_mask[1] == 0])
+        self.processed_data -= background_mean
+        #setting noise/background to np.nan
+        condition = data_mask[0] == 1
         self.processed_data = np.where(condition, self.processed_data, np.nan)
 
     def get_processed_data(self) -> np.ndarray:

@@ -14,7 +14,7 @@ from src.core.reslut_class import ProcessedResult, HDF5DataStore
 class XPSGroupProcessor:
     def __init__(self, 
                  background_data: np.ndarray,
-                 data_mask_data: np.ndarray,
+                 data_mask_data: List[np.ndarray],
                  X_ray_config: List,
                  center_config: List,
                  azimuthal_config: List,
@@ -26,7 +26,7 @@ class XPSGroupProcessor:
         
         Args:
             background_data: Background data for subtraction
-            data_mask_data: Data mask for masking area of valid signal
+            data_mask_data: Data mask for masking area of background and valid signal
             X_ray_config: [sigma_threshold, expansion_threshold_ratio]
             center_config: [ring_mask, initial_guess]
             azimuthal_config: [radial_masks, azimuthal_mask_dict]

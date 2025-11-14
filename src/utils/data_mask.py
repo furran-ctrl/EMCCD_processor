@@ -1,8 +1,13 @@
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
+from typing import List
 
-def data_to_color_png(data_array: np.ndarray, filename: str = "data_color_map.png", cmap: str = 'viridis'):
+def data_to_color_png(data_array: np.ndarray, 
+                      filename: str = "data_color_map.png", 
+                      cmap: str = 'viridis', 
+                      manual_min: float = None, 
+                      manual_max: float = None):
     """
     Converts a 2D NumPy data array into a color-mapped PNG image for enhanced visualization.
 
@@ -13,6 +18,10 @@ def data_to_color_png(data_array: np.ndarray, filename: str = "data_color_map.pn
         filename (str): The complete file path and name for the output PNG image, 
                         including the target directory (e.g., 'output/data.png').
         cmap (str): The Matplotlib colormap name (e.g., 'viridis', 'jet', 'magma').
+        manual_min (float, optional): Manually set the minimum value for normalization. 
+                                      Data below this is clamped to 0. Defaults to None (use array min).
+        manual_max (float, optional): Manually set the maximum value for normalization. 
+                                      Data above this is clamped to 1. Defaults to None (use array max).
     """
     if data_array.ndim != 2:
         print("Error: Input data array must be 2-dimensional.")
@@ -20,18 +29,30 @@ def data_to_color_png(data_array: np.ndarray, filename: str = "data_color_map.pn
 
     print(f"Generating color map image '{filename}' using '{cmap}'...")
 
-    # Normalize data to 0-1 range
-    data_min = data_array.min()
-    data_max = data_array.max()
-    if data_min == data_max:
-        # Avoid division by zero if array is constant
+    # Determine min/max values, using manual values if provided
+    d_min = data_array.min() if manual_min is None else manual_min
+    d_max = data_array.max() if manual_max is None else manual_max
+    
+    # 1. Clamp the data to ensure values used for normalization fall between d_min and d_max.
+    # This guarantees the normalized result (step 2) is between 0 and 1.
+    clamped_data = np.clip(data_array, d_min, d_max)
+
+    # 2. Normalize the clamped data to 0-1 range
+    if d_min == d_max:
+        # Avoid division by zero if array is constant or clamped range is zero
         data_normalized = np.zeros_like(data_array, dtype=float)
     else:
-        data_normalized = (data_array - data_min) / (data_max - data_min)
+        # The clamped data ensures this result is guaranteed to be between 0 and 1.
+        data_normalized = (clamped_data - d_min) / (d_max - d_min)
 
 
     # Use Matplotlib to apply the colormap and convert to RGB
-    mapper = plt.cm.get_cmap(cmap)
+    try:
+        mapper = plt.colormaps[cmap] # Use modern Matplotlib colormap API
+    except KeyError:
+        print(f"Warning: Colormap '{cmap}' not found. Defaulting to 'viridis'.")
+        mapper = plt.colormaps['viridis']
+
     color_mapped_data = mapper(data_normalized)
 
     # Convert the RGBA (0-1 float) array to an 8-bit RGB (0-255 uint8) array
