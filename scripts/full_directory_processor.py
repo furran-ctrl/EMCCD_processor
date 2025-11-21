@@ -9,7 +9,7 @@ from dataclasses import asdict
 import json
 
 from src.core.processor_objects import XPSGroupProcessor
-from src.io.xps_value_sort import group_tiff_files_with_info, merge_xps_groups_strategy
+from src.io.xps_value_sort import group_tiff_files_with_info, merge_xps_groups_manual, merge_xps_groups_strategy
 from src.io.tiff_import import TiffLoader
 from src.core.mask_class import precompute_ring_mask, precompute_radial_masks, precompute_azimuthal_average_masks
 from src.core.processing_utils import ProcessingConfig
@@ -158,9 +158,21 @@ class DirectoryProcessor:
         """
         self.logger.info("Sorting files into XPS groups...")
         
-        # Group files by XPS value, now set to be self.merged_groups without merging
+        # Group files by XPS value
         groups_with_xps = group_tiff_files_with_info(self.data_directory)
-        self.merged_groups = groups_with_xps
+
+        # Display group information
+        print(f"\nXPS Groups Summary:")
+        print("=" * 40)
+        for xps_value, files in self.merged_groups:
+            print(f"XPS {xps_value:.5f}: {len(files)} files")
+        print(f"\nTotal: {len(self.merged_groups)} XPS groups")
+
+        # Extract threshold and tolerance
+        manual_groups = self.xps_grouping_param
+        self.merged_groups = merge_xps_groups_manual(
+            groups_with_xps,
+            manual_groups)
         
         '''# Extract threshold and tolerance
         threshold, tolerance = self.xps_grouping_param
@@ -172,7 +184,7 @@ class DirectoryProcessor:
             tolerance=tolerance
         )'''
         
-        # Display group information
+        # Display group information after sorting
         print(f"\nXPS Groups Summary:")
         print("=" * 40)
         for xps_value, files in self.merged_groups:

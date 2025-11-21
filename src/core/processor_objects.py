@@ -10,6 +10,7 @@ from src.io.tiff_import import TiffLoader
 from src.utils.timer import timer
 from src.io.quick_plot import plot_azimuthal_average, plot_ndarray
 from src.core.processing_utils import ProcessedResult, HDF5DataStore
+from src.io.xps_value_sort import extract_xps_value
 
 class XPSGroupProcessor:
     def __init__(self, 
@@ -190,7 +191,7 @@ class XPSGroupProcessor:
                 center=center,
                 total_count=image_file.total_count,
                 radial_profile=radial_average,
-                xps_value=self.xps_value
+                xps_value=extract_xps_value(Path(filepath).name)
             )
 
             #self.logger.info(f"Successfully processed: {Path(filepath).name}")

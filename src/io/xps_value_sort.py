@@ -278,6 +278,75 @@ def merge_xps_groups_strategy(groups_with_xps: List[Tuple[float, List[str]]],
     
     return merged_groups
 
+# --- New Manual Merging Function ---
+def merge_xps_groups_manual(
+    groups_with_xps: List[Tuple[float, List[str]]],
+    manual_groups_xps_values: List[List[float]]
+) -> List[Tuple[float, List[str]]]:
+    """
+    Merges XPS groups based on a manually defined list of XPS values.
+
+    Args:
+        groups_with_xps: The original list of (xps_value, [file_list]) tuples 
+                         from 'group_tiff_files_with_info()'.
+        manual_groups_xps_values: A list of lists, where each inner list 
+                                  contains the XPS values (e.g., [xps1, xps2, ...])
+                                  that should be merged into one final group. 
+                                  The XPS values are expected to be floats.
+
+    Returns:
+        List of merged groups with calculated weighted average XPS values 
+        and the combined list of files.
+    """
+    if not groups_with_xps or not manual_groups_xps_values:
+        return []
+
+    # 1. Create a lookup dictionary for fast access: XPS value -> (XPS, File List) tuple
+    # Note: Use a precise float representation for the key, as specified in the prompt 
+    # (though typically using decimals for keys is safer, floats should work here 
+    # if the original XPS values were also formatted).
+    xps_lookup: Dict[float, Tuple[float, List[str]]] = {
+        round(xps, 5): (xps, files) for xps, files in groups_with_xps
+    }
+    
+    merged_groups: List[Tuple[float, List[str]]] = []
+
+    # 2. Iterate through the manual groups list
+    for group_xps_list in manual_groups_xps_values:
+        
+        # This will hold the (xps, files) tuples for all initial groups 
+        # that belong to the current final group
+        current_cluster: List[Tuple[float, List[str]]] = []
+
+        # 3. Collect the data for the manual cluster
+        for xps_value in group_xps_list:
+            # We must round the input XPS value to match the lookup key precision (.5f)
+            # as specified in the prompt
+            lookup_key = round(xps_value, 5) 
+            
+            if lookup_key in xps_lookup:
+                # Retrieve the original (xps, files) tuple
+                original_group_data = xps_lookup[lookup_key]
+                current_cluster.append(original_group_data)
+            else:
+                # Optionally handle case where a specified XPS value doesn't exist 
+                # in the original data (e.g., skip or raise error)
+                print(f"Warning: XPS value {xps_value:.5f} not found in original groups. Skipping.")
+
+        # 4. Calculate the weighted average and combine files for the final group
+        if current_cluster:
+            weighted_xps = calculate_weighted_xps(current_cluster)
+            
+            all_files: List[str] = []
+            for _, files in current_cluster:
+                all_files.extend(files)
+            
+            merged_groups.append((weighted_xps, all_files))
+
+    # 5. Sort the final merged groups by their new weighted XPS value
+    merged_groups.sort(key=lambda x: x[0])
+    
+    return merged_groups
 
 def calculate_weighted_xps(cluster: List[Tuple[float, List[str]]]) -> float:
     """
