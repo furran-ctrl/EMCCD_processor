@@ -35,6 +35,8 @@ class ResultsFilter:
         center_x_std = df['center_x'].std()
         center_y_mean = df['center_y'].mean() 
         center_y_std = df['center_y'].std()
+        tc_mean = df['total_count'].mean() 
+        tc_std = df['total_count'].std()
         radial_bin_0_mean = df['radial_bin_000'].mean()
         radial_bin_0_std = df['radial_bin_000'].std()
         
@@ -44,6 +46,8 @@ class ResultsFilter:
             (df['center_x'] <= center_x_mean + 3 * center_x_std) &
             (df['center_y'] >= center_y_mean - 3 * center_y_std) & 
             (df['center_y'] <= center_y_mean + 3 * center_y_std) &
+            (df['total_count'] >= tc_mean - 2 * tc_std) & 
+            (df['total_count'] <= tc_mean + 2 * tc_std) &
             (df['radial_bin_000'] >= radial_bin_0_mean - 3 * radial_bin_0_std) &
             (df['radial_bin_000'] <= radial_bin_0_mean + 3 * radial_bin_0_std)
         )

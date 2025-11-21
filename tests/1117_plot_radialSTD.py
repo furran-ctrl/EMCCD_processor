@@ -17,28 +17,37 @@ def plot_radial_bin_std(parquet_file_path: str):
     radial_columns = [col for col in df.columns if col.startswith('radial_bin_')]
     
     # Define the normalization range (bins 10 to 100)
-    norm_columns = [f'radial_bin_{i:03d}' for i in range(30, 150)]
+    '''norm_columns = [f'radial_bin_{i:03d}' for i in range(30, 200)]
     
     # Calculate normalization factor for each file (sum of bins 10-100)
-    normalization_factors = df[norm_columns].sum(axis=1)
+    #normalization_factors = df[norm_columns].sum(axis=1)
+    # Calculate normalization factor for each file: sum(bin_number^2 * radial_bin) over bins 30-150
+    normalization_factors = np.zeros(len(df))
+    for i, col in enumerate(norm_columns):
+        bin_num = 30 + i  # bin numbers from 30 to 149
+        normalization_factors += df[col].values * (bin_num ** 1)
     
     # Normalize each radial profile by the sum of bins 10-100
-    normalized_radial_data = df[radial_columns].div(normalization_factors, axis=0)
+    normalized_radial_data = df[radial_columns].div(normalization_factors, axis=0)'''
+    normalized_radial_data = df[radial_columns]
+    #calculate the log for each data in normalized_radial_data
+    #normalized_radial_data = np.log1p(normalized_radial_data)
     
     # Calculate mean and standard deviation for each normalized radial bin
     radial_means = normalized_radial_data.mean()
+    radial_means = np.log1p(radial_means)
     radial_stds = normalized_radial_data.std()
     
     # Calculate std/mean (coefficient of variation)
     radial_std_over_mean = radial_stds / radial_means
-    radial_std_over_mean /= 35.27
+    #radial_std_over_mean /= len(df)**0.5
     
     # Create bin indices from column names
-    bin_indices = [int(col.split('_')[-1]) for col in radial_columns]
+    bin_indices = [int(col.split('_')[-1])*0.024 for col in radial_columns]
     
     # Plot
     plt.figure(figsize=(10, 6))
-    plt.plot(bin_indices, radial_std_over_mean.values, 'b-', linewidth=2)
+    plt.plot(bin_indices, radial_means.values, 'b-', linewidth=2)
     plt.xlabel('Radial Bin Index')
     plt.ylabel('Standard Deviation')
     plt.title(f'Standard Deviation of Radial Bins\n{Path(parquet_file_path).name}')
@@ -55,5 +64,5 @@ def plot_radial_bin_std(parquet_file_path: str):
 
 # Usage example:
 if __name__ == "__main__":
-    file_path = r"C:\Users\86177\Desktop\0809\analysis_parallel_time\xps_189.10625/filtered_xps_189.10625.parquet"
+    file_path = r"C:\Users\86177\Desktop\0809\analysis_parallel_time\xps_189.69000/filtered_xps_189.69000.parquet"
     plot_radial_bin_std(file_path)

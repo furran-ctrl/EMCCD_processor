@@ -9,7 +9,7 @@ from src.core.tiff_objects import EMCCDimage
 from src.io.tiff_import import TiffLoader
 from src.utils.timer import timer
 from src.io.quick_plot import plot_azimuthal_average, plot_ndarray
-from src.core.reslut_class import ProcessedResult, HDF5DataStore
+from src.core.processing_utils import ProcessedResult, HDF5DataStore
 
 class XPSGroupProcessor:
     def __init__(self, 

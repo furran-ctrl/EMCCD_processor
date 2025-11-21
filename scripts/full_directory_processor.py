@@ -12,7 +12,7 @@ from src.core.processor_objects import XPSGroupProcessor
 from src.io.xps_value_sort import group_tiff_files_with_info, merge_xps_groups_strategy
 from src.io.tiff_import import TiffLoader
 from src.core.mask_class import precompute_ring_mask, precompute_radial_masks, precompute_azimuthal_average_masks
-from src.core.reslut_class import ProcessingConfig
+from src.core.processing_utils import ProcessingConfig
 
 class DirectoryProcessor:
     def __init__(self,
