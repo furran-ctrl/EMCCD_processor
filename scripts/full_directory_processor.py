@@ -8,11 +8,11 @@ import logging
 from dataclasses import asdict
 import json
 
-from src.core.processor_objects import XPSGroupProcessor
-from src.io.xps_value_sort import group_tiff_files_with_info, merge_xps_groups_manual, merge_xps_groups_strategy
-from src.io.tiff_import import TiffLoader
-from src.core.mask_class import precompute_ring_mask, precompute_radial_masks, precompute_azimuthal_average_masks
-from src.core.processing_utils import ProcessingConfig
+from processor_code.core.processor_objects import XPSGroupProcessor
+from processor_code.io.xps_value_sort import group_tiff_files_with_info, merge_xps_groups_manual, merge_xps_groups_strategy
+from processor_code.io.tiff_import import TiffLoader
+from processor_code.core.mask_class import precompute_ring_mask, precompute_radial_masks, precompute_azimuthal_average_masks
+from processor_code.core.processing_utils import ProcessingConfig
 
 class DirectoryProcessor:
     def __init__(self,
@@ -168,13 +168,13 @@ class DirectoryProcessor:
             print(f"XPS {xps_value:.5f}: {len(files)} files")
         print(f"\nTotal: {len(self.merged_groups)} XPS groups")
 
-        # Extract threshold and tolerance
+        '''# Group manually if auto select didnt work
         manual_groups = self.xps_grouping_param
         self.merged_groups = merge_xps_groups_manual(
             groups_with_xps,
-            manual_groups)
+            manual_groups)'''
         
-        '''# Extract threshold and tolerance
+        # Extract threshold and tolerance
         threshold, tolerance = self.xps_grouping_param
         
         # Merge similar XPS groups
@@ -182,7 +182,7 @@ class DirectoryProcessor:
             groups_with_xps, 
             threshold=threshold, 
             tolerance=tolerance
-        )'''
+        )
         
         # Display group information after sorting
         print(f"\nXPS Groups Summary:")
@@ -418,11 +418,7 @@ class DirectoryProcessor:
 
     def preprocess_screening(self, group_size: int) -> np.ndarray:
         """
-        Process XPS groups in parallel.
-        
-        Args:
-            max_workers: Maximum number of parallel threads
-            analyze_no: Analysis number for organizing results
+        Select group_size files from a chosen xps group to preprocess
         """
         self.logger.info(f"Starting preprocess screening with {group_size} images")
         

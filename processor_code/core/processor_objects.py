@@ -353,7 +353,8 @@ class XPSGroupProcessor:
         
         # Compute mean
         image_stack = np.stack(all_processed_data, axis=0)
-        mean_image = np.mean(image_stack, axis=0)
+        #mean_image = np.mean(image_stack, axis=0)
+        mean_image = np.nanmean(image_stack, axis=0)
         
         print(f"✓ Mean image computed from {len(all_processed_data)} images")
         return mean_image
