@@ -17,10 +17,11 @@ class CenterCoordinateFilter:
     def _remove_outliers_mad(self, data: np.ndarray, n_mads: float = 8.0) -> np.ndarray:
         """Remove outliers using Median Absolute Deviation"""
         median = np.median(data)
-        mad = np.median(np.abs(data - median))
+        mad = min(np.median(np.abs(data - median)),1.5)
         
-        lower_bound = median - n_mads * mad
-        upper_bound = median + n_mads * mad
+        #possible to add manual bounds in case the data is too dirty
+        lower_bound = max(median - n_mads * mad,0)
+        upper_bound = min(median + n_mads * mad,1024)
             
         mask = (data >= lower_bound) & (data <= upper_bound)
         return data[mask]
@@ -89,6 +90,12 @@ class CenterCoordinateFilter:
         )
         
         filtered_df = df[mask].copy()
+        # NEW: Filter out rows with any NaN values in radial bins
+        radial_columns = [col for col in filtered_df.columns if col.startswith('radial_bin_')]
+        nan_mask = ~filtered_df[radial_columns].isna().any(axis=1)
+        filtered_df = filtered_df[nan_mask].copy()
+        
+        print(f"Removed {len(mask) - len(nan_mask)} rows with NaN radial bins")
         return filtered_df
     
     def process_all_files(self) -> Dict[str, Dict]:

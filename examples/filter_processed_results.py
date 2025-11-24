@@ -6,6 +6,8 @@ sys.path.insert(0, project_root)
 from scripts.result_filter import ResultsFilter
 from pathlib import Path
 
+#vintage version discarded, move to basic_filter_analysis.py
+
 # Initialize filter
 filter_processor = ResultsFilter(r"C:\Users\86177\Desktop\0809\analysis_parallel_time")
 

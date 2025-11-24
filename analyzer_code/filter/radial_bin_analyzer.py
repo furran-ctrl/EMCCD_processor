@@ -42,14 +42,35 @@ class RadialBinAnalyzer:
         """
         # Calculate baseline
         baseline = self.calculate_baseline(intensities)
-        
+
         # Remove baseline
         baseline_removed = intensities - baseline
-        
+        # nan_indices = [i for i, x in enumerate(baseline_removed) if np.isnan(x)]
+        # print(f"NaN indices: {nan_indices}")
+
         # Calculate mad_filter (mad of baseline-removed data)
         baseline_median = np.median(baseline_removed)
         mad_filter = np.median(np.abs(baseline_removed - baseline_median))
         
+        #Case check to save the processor in case of nan from calculate_baseline
+        if np.isnan(mad_filter):
+            # Return empty results with no filtering
+            return {
+                'sigma_ideal': np.nan,
+                'sigma_shift': np.nan,
+                'sigma_exp': np.nan,
+                'avg_intensity': np.nan,
+                'baseline': np.array([]),
+                'baseline_removed': np.array([]),
+                'filtered_data': np.array([]),
+                'filtered_baseline_removed': np.array([]),
+                'outlier_mask': np.ones(len(intensities), dtype=bool),
+                'is_outlier': np.zeros(len(intensities), dtype=bool),
+                'original_count': len(intensities),
+                'filtered_count': 0,
+                'removal_ratio': 0.0
+            }
+
         # Filter outliers: remove data where |data - baseline| > 4 * MAD
         outlier_mask = np.abs(baseline_removed) <= 4 * mad_filter
         filtered_data = intensities[outlier_mask]
@@ -63,7 +84,7 @@ class RadialBinAnalyzer:
         if sigma_exp**2-sigma_ideal**2 > 0:
             sigma_shift = (sigma_exp**2-sigma_ideal**2)**0.5
         else: 
-            sigma_shift = 0
+            sigma_shift = 0 
 
         # Calculate average of filtered data
         avg_intensity = np.mean(filtered_data) if len(filtered_data) > 0 else 0.0
@@ -193,13 +214,13 @@ class RadialBinAnalyzer:
         print("Applying 90% threshold filter to images...")
         n_valid_bins_per_image = np.sum(~outlier_matrix, axis=1)  # Count good bins per image
         percentage_good_bins = n_valid_bins_per_image / n_bins
-        image_passes_filter = percentage_good_bins >= 0.95  # 90% threshold
+        image_passes_filter = percentage_good_bins >= 0.95  # 95% threshold
         
         n_passing_images = np.sum(image_passes_filter)
         n_removed_images = n_images - n_passing_images
         
         print(f"Image filtering results: {n_passing_images}/{n_images} images passed ({n_passing_images/n_images*100:.1f}%)")
-        print(f"Removed {n_removed_images} images that had <90% valid radial bins")
+        print(f"Removed {n_removed_images} images that had <95% valid radial bins")
         
         # Create filtered DataFrame with only passing images
         filtered_df = df[image_passes_filter].copy()
