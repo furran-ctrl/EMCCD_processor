@@ -224,16 +224,16 @@ def analyze_single_file_with_plot(parquet_file_path: str, save_plot_path: str = 
     )
 
 # Single file analysis WITH plotting
-results = analyze_single_file_with_plot(
-    r"C:\Users\86177\Desktop\diffffraction\water-analyze\20250926streaking\analysis_parallel_time\xps_221.30750/finefilt_xps_221.30750.parquet",
-    save_plot_path=r"C:\Users\86177\Desktop\diffffraction/sem_plot_188.94000.png"
-)
+# results = analyze_single_file_with_plot(
+#     r"C:\Users\86177\Desktop\diffffraction\water-analyze\20250926streaking\analysis_parallel_time\xps_221.30750/finefilt_xps_221.30750.parquet",
+#     save_plot_path=r"C:\Users\86177\Desktop\diffffraction/sem_plot_188.94000.png"
+# )
 
 # Batch processing WITHOUT plotting (for combined CSV)
-# all_results, combined_df = batch_process_sem(
-#     analysis_directory=r"C:\Users\86177\Desktop\diffffraction\water-analyze\20250926streaking\analysis_parallel_time",
-#     output_dir=r"C:\Users\86177\Desktop\diffffraction\water-analyze\20250926streaking"
-# )
+all_results, combined_df = batch_process_sem(
+    analysis_directory=r"C:\Users\86177\Desktop\diffffraction\water-analyze\20250926streaking\analysis_parallel_time",
+    output_dir=r"C:\Users\86177\Desktop\diffffraction\water-analyze\20250926streaking"
+)
 
 # The combined CSV will have structure:
 # q_values, xps_188.94000, xps_189.12000, xps_189.30000, ...

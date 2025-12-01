@@ -11,7 +11,7 @@ import json
 from processor_code.core.processor_objects import XPSGroupProcessor
 from processor_code.io.xps_value_sort import group_tiff_files_with_info, merge_xps_groups_manual, merge_xps_groups_strategy
 from processor_code.io.tiff_import import TiffLoader
-from processor_code.core.mask_class import precompute_ring_mask, precompute_radial_masks, precompute_azimuthal_average_masks
+from processor_code.core.mask_class import precompute_ring_mask, precompute_radial_masks, precompute_azimuthal_average_masks, precompute_center_masks
 from processor_code.core.processing_utils import ProcessingConfig
 
 class DirectoryProcessor:
@@ -73,11 +73,15 @@ class DirectoryProcessor:
         initial_guess = (center_x, center_y)
         
         # Initialize ring mask
-        ring_mask = precompute_ring_mask(
+        # ring_mask = precompute_ring_mask(
+        #     inner_radius=inner_radius, 
+        #     outer_radius=outer_radius
+        # )
+        ring_mask = precompute_center_masks(
             inner_radius=inner_radius, 
             outer_radius=outer_radius
         )
-        
+
         # Initialize radial masks
         radial_masks = precompute_radial_masks(
             radius=radius, 

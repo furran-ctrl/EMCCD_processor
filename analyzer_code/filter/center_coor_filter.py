@@ -83,10 +83,10 @@ class CenterCoordinateFilter:
         
         # Filter: remove points outside ±4σ (using reference sigma)
         mask = (
-            (df['center_x'] >= mean_x - 4 * sigma_x) & 
-            (df['center_x'] <= mean_x + 4 * sigma_x) &
-            (df['center_y'] >= mean_y - 4 * sigma_y) & 
-            (df['center_y'] <= mean_y + 4 * sigma_y)
+            (df['center_x'] >= mean_x - 3 * sigma_x) & 
+            (df['center_x'] <= mean_x + 3 * sigma_x) &
+            (df['center_y'] >= mean_y - 3 * sigma_y) & 
+            (df['center_y'] <= mean_y + 3 * sigma_y)
         )
         
         filtered_df = df[mask].copy()
@@ -95,7 +95,7 @@ class CenterCoordinateFilter:
         nan_mask = ~filtered_df[radial_columns].isna().any(axis=1)
         filtered_df = filtered_df[nan_mask].copy()
         
-        print(f"Removed {len(mask) - len(nan_mask)} rows with NaN radial bins")
+        print(f"Removed {len(nan_mask) - len(filtered_df)} rows with NaN radial bins")
         return filtered_df
     
     def process_all_files(self) -> Dict[str, Dict]:

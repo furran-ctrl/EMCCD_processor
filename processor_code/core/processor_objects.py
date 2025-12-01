@@ -173,7 +173,11 @@ class XPSGroupProcessor:
 
             # Find diffraction center
             #with timer('center_finding'):
-            center = image_file.iterative_ring_centroid(
+            # center = image_file.iterative_ring_centroid(
+            #     self.center_config[0],  # ring_mask
+            #     self.center_config[1]   # initial_guess
+            # )
+            center = image_file.find_center_with_std(
                 self.center_config[0],  # ring_mask
                 self.center_config[1]   # initial_guess
             )

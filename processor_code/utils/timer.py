@@ -12,3 +12,7 @@ def timer(description: str = "代码块"):
     finally:
         end = time.perf_counter()
         print(f"{description} 执行时间: {end - start:.4f} 秒")
+
+# example:
+# with timer
+#     target_function()

@@ -2,6 +2,7 @@ import numpy as np
 from typing import Optional, Tuple, List
 from scipy.ndimage import shift
 from scipy.ndimage import binary_dilation
+from scipy.optimize import minimize
 
 from processor_code.utils.gaussian_fitting import fit_circular_gaussian_ring
 from processor_code.core.mask_class import RadialMasks, RingMask
@@ -518,7 +519,6 @@ class EMCCDimage:
         shift_y = int(round(center_y - mask_center_y))
         
         # Use scipy.ndimage.shift instead of np.roll to handle NaN values properly
-        from scipy.ndimage import shift
         shifted_data = shift(self.processed_data, 
                             shift=(-shift_y, -shift_x), 
                             order=0,  # nearest neighbor
@@ -634,6 +634,106 @@ class EMCCDimage:
         self.center_pos = self.ring_centroid(ring_mask, current_center, save_total_count=True)
         return self.center_pos
     
+    def calculate_std_sum_with_masks(self,
+                                    radial_masks: RadialMasks, 
+                                    center: Tuple[float, float]) -> float:
+        """
+        Calculate weighted sum of standard deviations using precomputed masks.
+        
+        Args:
+            image_data: Processed diffraction pattern data
+            radial_masks: Precomputed radial masks
+            center: Center coordinates (x, y)
+            
+        Returns:
+            float: Sum of bin_center^2 * std_dev for all valid radial bins
+        """
+        center_x, center_y = center
+        shift_x = int(round(center_x - radial_masks.image_shape[1] // 2))
+        shift_y = int(round(center_y - radial_masks.image_shape[0] // 2))
+        
+        # Shift image to align with precomputed masks
+        if shift_x == 0 and shift_y == 0:
+            shifted_data = self.processed_data
+        else:
+            shifted_data = shift(self.processed_data, 
+                            shift=(-shift_y, -shift_x), 
+                            order=0,  # nearest neighbor
+                            mode='constant', 
+                            cval=np.nan)
+        
+        total_weighted_std = 0.0
+        valid_bins = 0
+        
+        for i, mask in enumerate(radial_masks.masks):
+            # Extract intensities using precomputed mask
+            intensities = shifted_data[mask]
+            
+            # Filter out NaN values
+            valid_intensities = intensities[~np.isnan(intensities)]
+            
+            # Need at least 2 points to calculate standard deviation
+            if len(valid_intensities) >= 2:
+                std_dev = np.std(valid_intensities)
+                bin_center = radial_masks.bin_centers[i]
+                weighted_std = (bin_center ** 2) * std_dev
+                total_weighted_std += weighted_std
+                valid_bins += 1
+        
+        # Return average if we have valid bins, otherwise return infinity
+        if valid_bins > 0:
+            return total_weighted_std / valid_bins
+        else:
+            return np.inf
+
+    def find_center_with_std(self,
+                                    radial_masks: RadialMasks,
+                                    initial_guess: Tuple[float, float],
+                                    max_iter: int = 30) -> Tuple[float, float]:
+        """
+        Find diffraction center by minimizing weighted standard deviation.
+        
+        Args:
+            image_data: Processed diffraction pattern data
+            radial_masks: Precomputed radial masks
+            initial_guess: Initial center coordinates (x, y)
+            max_iter: Maximum iterations for optimization
+            
+        Returns:
+            tuple: Optimized center (x, y) and final weighted std sum
+        """
+        # Validate input shapes
+        if self.processed_data.shape != radial_masks.image_shape:
+            raise ValueError(
+                f"Image shape {self.processed_data.shape} doesn't match "
+                f"mask shape {radial_masks.image_shape}"
+            )
+        
+        # Define objective function for optimization
+        # def objective(center_params: np.ndarray) -> float:
+        #     """Objective function to minimize: weighted sum of std deviations."""
+        #     center_x, center_y = center_params
+        #     return self.calculate_std_sum_with_masks(radial_masks, (center_x, center_y))
+        
+        # Set bounds for optimization (±5 pixels around initial guess)
+        guess_x, guess_y = initial_guess
+        
+        # Perform optimization
+        result = minimize(
+            self.calculate_std_sum_with_masks,
+            args=[radial_masks],
+            x0=[guess_x, guess_y],
+            method='Nelder-Mead',  # Works well for 2D problems, doesn't need gradients
+            options={
+                'maxiter': max_iter,
+                'disp': False,
+                'xatol': 1.0,  # Coordinate tolerance
+            }
+        )
+        
+        optimized_center = result.x
+        return optimized_center[0], optimized_center[1]
+
     def ring_centroid_debug(self,
                            ring_mask: RingMask,
                            initial_guess: Tuple[float, float],
@@ -738,7 +838,9 @@ class EMCCDimage:
                     radial_average[i] = np.mean(valid_values)
                     pixel_counts[i] = len(valid_values)
                     valid_pixels_total += len(valid_values)
-                    
+
+        self.total_count = np.sum((np.arange(40, 200) ** 2) * radial_average[40:200])      
+            
         return radial_masks.bin_centers, radial_average
 
     def azimuthal_average_legacy(self, 

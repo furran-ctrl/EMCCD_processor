@@ -1,0 +1,55 @@
+Text file to summarize the project's major functions and classes
+
+Last updated on 11/30/2025
+-----------------------------------------------------------------
+File Structure:
+-EMCCD_PROCESSOR{
+    processor_code{
+        core{
+            bkg_objects     calculates bkg file
+            mask_objects    mask for centerfinding and radialaverage
+            processing_utils    class for results and config
+            processor_objects   CLASS for processing all files in a xps group 
+            tiff_objects    CLASS for all relevant logic concerning .tiff 
+        utils{
+            data_mask       save/creates ndarray mask with .png
+            gaussian_fitting    (no longer relevant)
+            timer           auxiliary stopwatch for functions
+        }
+        io{
+            tiff_import     loads .tiff into ndarray 
+            result_save     saves ndaarray into .tiff
+            xps_value_sort  groups .tiff in target dir by their xps values
+            quick_plot      mainly plots .tiff
+        }
+    }
+    analyzer_code{
+        filter{
+            center_coor_filter  1st filter on center pos, removes NaN
+            radial_bin_analyzer 2nd filter on I(q)'s radial values 
+        }
+        plotting{
+            SEM_from_finefilt   calculates SEM, I(q)
+            PDwaterfall_plot    plots PD, code needs cleaning up 
+        }
+        utils{
+            (for potentially replacing import_dcs)
+        }
+    }
+    examples{
+        packaged workflows
+    }
+    scripts{
+        full_directory_processor    CLASS for processing a given data dir
+        result_filter       all filtering logic 
+    }
+    tests{
+        (ignored by .gitignore)
+    }
+    .gitignore
+    LICENSE
+    README.md
+    requirements.txt
+    setup.py
+}
+-----------------------------------------------------------------

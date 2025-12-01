@@ -40,11 +40,11 @@ def plot_averaged_tiffs(parquet_path, row_indices, tiff_directory):
     mean_array = averaged_array - bkg_array
 
     # Plot the averaged array
-    plot_ndarray(mean_array, -15, 0)
+    plot_ndarray(mean_array, 10,100)
     #param:[0,50]for bkg_removed, [450,700]for raw
 
 # Example usage:
 #plot_averaged_tiffs("path/to/your/file.parquet", [0, 1, 2, 3], r"D:\20250926\3_longscan5_44deg\fist_AndorEMCCD")
-filelist = range(173,193)
-parquetdir = r'C:\Users\86177\Desktop\diffffraction\water-analyze\20250926streaking\analysis_parallel_time\xps_221.02480\xps_221.02480.parquet'
-plot_averaged_tiffs(parquetdir, [719], r"D:\20250926\3_longscan5_44deg\fist_AndorEMCCD")
+filelist = range(2,50)
+parquetdir = r'C:\Users\86177\Desktop\diffffraction\water-analyze\20250926streaking\analysis_parallel_time\xps_221.00151\finefilt_xps_221.00151.parquet'
+plot_averaged_tiffs(parquetdir, filelist, r"D:\20250926\3_longscan5_44deg\fist_AndorEMCCD")

@@ -109,6 +109,47 @@ def precompute_azimuthal_average_masks(radial_masks):
         'total_pixels': image_shape[0] * image_shape[1]
     }
 
+def precompute_center_masks(image_shape: Tuple[int, int] = (1024,1024), inner_radius: int = 5, outer_radius: int = 51) -> RadialMasks:
+    """
+    Precompute radial masks for efficient center finding.
+    
+    Args:
+        image_shape: Image dimensions (height, width)
+        inner_radius: Minimum radius for radial bins (inclusive)
+        outer_radius: Maximum radius for radial bins (inclusive)
+        
+    Returns:
+        RadialMasks: Precomputed radial masks object
+    """
+    height, width = image_shape
+    
+    # Create coordinate grids centered at image center
+    y_coords, x_coords = np.mgrid[:height, :width]
+    center_y = height // 2
+    center_x = width // 2
+    
+    # Calculate radial distances from center
+    radial_dist = np.sqrt((x_coords - center_x)**2 + (y_coords - center_y)**2)
+    
+    # Create masks for each radial bin
+    masks = []
+    bin_centers = []
+    
+    for r in range(inner_radius, outer_radius + 1, 5):
+        # Create mask for pixels at distance r ± 0.5
+        mask = np.abs(radial_dist - r) <= 0.5
+        if np.any(mask):  # Only add mask if it contains pixels
+            masks.append(mask)
+            bin_centers.append(float(r))
+    
+    return RadialMasks(
+        bin_centers=np.array(bin_centers),
+        masks=masks,
+        image_shape=image_shape,
+        radius=float(outer_radius),
+        num_bins=len(bin_centers)
+    )
+
 @dataclass
 class RingMask:
     """
