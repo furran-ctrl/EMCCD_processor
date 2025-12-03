@@ -177,11 +177,12 @@ class XPSGroupProcessor:
             #     self.center_config[0],  # ring_mask
             #     self.center_config[1]   # initial_guess
             # )
+            
             center = image_file.find_center_with_std(
-                self.center_config[0],  # ring_mask
-                self.center_config[1]   # initial_guess
+                radial_masks=self.center_config[0],  # ring_mask
+                initial_guess=self.center_config[1]   # initial_guess
             )
-
+            
             # Calculate azimuthal average
             #with timer('azimuthal_avg'):
             bin_centers, radial_average = image_file.azimuthal_average_bincount(
@@ -197,7 +198,7 @@ class XPSGroupProcessor:
                 radial_profile=radial_average,
                 xps_value=extract_xps_value(Path(filepath).name)
             )
-
+            
             #self.logger.info(f"Successfully processed: {Path(filepath).name}")
             return result
 

@@ -134,8 +134,9 @@ def precompute_center_masks(image_shape: Tuple[int, int] = (1024,1024), inner_ra
     # Create masks for each radial bin
     masks = []
     bin_centers = []
+    radial_list = np.round(np.linspace(inner_radius,outer_radius,5)).astype(int).tolist()
     
-    for r in range(inner_radius, outer_radius + 1, 5):
+    for r in radial_list:
         # Create mask for pixels at distance r ± 0.5
         mask = np.abs(radial_dist - r) <= 0.5
         if np.any(mask):  # Only add mask if it contains pixels

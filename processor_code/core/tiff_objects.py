@@ -635,8 +635,8 @@ class EMCCDimage:
         return self.center_pos
     
     def calculate_std_sum_with_masks(self,
-                                    radial_masks: RadialMasks, 
-                                    center: Tuple[float, float]) -> float:
+                                    center: Tuple[float, float],
+                                    radial_masks: RadialMasks) -> float:
         """
         Calculate weighted sum of standard deviations using precomputed masks.
         
@@ -720,19 +720,21 @@ class EMCCDimage:
         
         # Perform optimization
         result = minimize(
-            self.calculate_std_sum_with_masks,
-            args=[radial_masks],
+            fun=self.calculate_std_sum_with_masks,
             x0=[guess_x, guess_y],
+            args=(radial_masks,),
             method='Nelder-Mead',  # Works well for 2D problems, doesn't need gradients
             options={
                 'maxiter': max_iter,
                 'disp': False,
-                'xatol': 1.0,  # Coordinate tolerance
+                'xatol': 0.5,  # Coordinate tolerance
             }
         )
         
         optimized_center = result.x
-        return optimized_center[0], optimized_center[1]
+        self.center_pos = optimized_center
+
+        return optimized_center
 
     def ring_centroid_debug(self,
                            ring_mask: RingMask,
