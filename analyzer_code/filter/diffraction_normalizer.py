@@ -23,7 +23,8 @@ class DiffractionNormalizer:
     """
     
     # Radial bins to use for normalization factor calculation
-    NORMALIZATION_BINS = [f"radial_bin_{i:03d}" for i in range(40, 201, 20)]  # 40, 60, 80, ..., 200
+    NORMALIZATION_BINS = [f"radial_bin_{i:03d}" for i in range(60, 201, 20)]  # 60, 80, ..., 200
+    AVG_TUNING_BINS = [f"radial_bin_{i:03d}" for i in range(330, 411, 20)]  # q8~10 at 0.024 A^-1/pixel
     
     def __init__(self, analysis_dir: str):
         """
@@ -210,7 +211,8 @@ class DiffractionNormalizer:
         
         # Calculate scaling factor for each row
         scaling_factors = avg_norm_factor / df['norm_factor']
-        
+        #scaling_factors = 100 / df['norm_factor']
+
         # Apply scaling to all radial bins
         for col in radial_columns:
             df_normalized[col] = df[col] * scaling_factors
@@ -341,7 +343,11 @@ class DiffractionNormalizer:
             norm_factor_thresholds = self.calculate_norm_factor_thresholds(df_with_factors['norm_factor'])
             df_filtered = self.filter_by_norm_factor_mad(df_with_factors, norm_factor_thresholds)
             # Update average norm factor based on filtered data
-            avg_norm_factor_filtered = statistics.harmonic_mean(df_filtered['norm_factor'])
+            # Sum the specified radial bins for each row
+            norm_factors = df_filtered[self.NORMALIZATION_BINS].sum(axis=1)
+            # Calculate average normalization factor
+            avg_norm_factors = df_filtered[self.AVG_TUNING_BINS].sum(axis=1)
+            avg_norm_factor_filtered = 100 / statistics.mean(avg_norm_factors/norm_factors)
 
             # Step 3: Save normalization factors to CSV
             self.save_normalization_factors(df_filtered, filtered_file.parent, xps_value)

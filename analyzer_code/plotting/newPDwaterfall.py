@@ -1,132 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def plot_waterfall_diffraction(data: list, xps_0: float, pixel_to_q: float, scale: float, width_to_height_ratio: float, filename: str = 'waterfall_plot.png'):
-    """
-    Generates a waterfall plot of Percentage Difference (PD) for diffraction data.
-
-    PD is calculated as: PD = (I - I_0) / I_0 * 100%
-    I_0 is the average of the two intensities with the largest XPS values.
-
-    Args:
-        data: list of [xps_value, [intensity values], [radial distance values]].
-        xps_0: The reference XPS value for time calculation.
-        pixel_to_q: Factor to convert radial distance to q (x-axis).
-        scale: Vertical scaling factor for PD (controls vertical offset).
-        width_to_height_ratio: Desired ratio of the plot width to height.
-        filename: Name for the saved plot image file.
-    """
-    if not data:
-        print("Error: The data list is empty.")
-        return
-
-    # 1. Sort data by XPS value (ascending) to ensure time-order plotting
-    sorted_data = sorted(data, key=lambda x: x[0])
-
-    # 2. Identify and calculate Background (I_0) from the two largest XPS groups
-    if len(sorted_data) < 2:
-        print("Error: Need at least two datasets to calculate background.")
-        return
-
-    bg_group_1 = sorted_data[-2]
-    bg_group_2 = sorted_data[-1]
-
-    I_bg_1 = np.array(bg_group_1[1])
-    I_bg_2 = np.array(bg_group_2[1])
-
-    # Calculate average background intensity (I_0)
-    I_0 = (I_bg_1 + I_bg_2) / 2
-    
-    xps_bg_1 = bg_group_1[0]
-    xps_bg_2 = bg_group_2[0]
-
-    # 3. Prepare the figure and axes
-    base_width = 8
-    height = base_width / width_to_height_ratio
-    
-    fig, ax = plt.subplots(figsize=(base_width, height))
-    time_tick_positions = []
-    all_PD_values = []
-    
-    # Define a constant vertical step in %PD for visual separation
-    vertical_step_PD = 1.0 * scale
-
-    # 4. Process and Plot Each Group
-    for i, group in enumerate(sorted_data):
-        xps_value = group[0]
-        I = np.array(group[1])
-        radial_distance = np.array(group[2])
-
-        # Calculate time (t)
-        time_ps = (xps_value - xps_0) / 0.1499
-
-        # Calculate PD: Percentage Difference
-        with np.errstate(divide='ignore', invalid='ignore'):
-            PD = np.divide(I - I_0, I_0, out=np.zeros_like(I_0, dtype=float), where=I_0!=0) * 100
-        
-        all_PD_values.extend(PD.tolist())
-        
-        # Calculate X-axis (q)
-        q = radial_distance * pixel_to_q
-
-        # The total offset for this curve
-        vertical_offset = i * vertical_step_PD
-        PD_curve = PD + vertical_offset
-        
-        # Plot the curve
-        ax.plot(q, PD_curve, color=plt.cm.viridis(i/len(sorted_data)), linewidth=1)
-        
-        # Store the vertical position for the time label
-        time_tick_positions.append(vertical_offset)
-
-
-    # 5a. Set up the Right-Hand (Time) Axis
-    ax_time = ax.twinx()
-    ax_time.set_ylim(ax.get_ylim()) 
-
-    # Create time labels
-    time_labels = [f"{(group[0] - xps_0) / 0.1499:.3f} ps" for group in sorted_data]
-    ax_time.set_yticks(time_tick_positions)
-    ax_time.set_yticklabels(time_labels, fontsize=10, ha='left')
-    ax_time.tick_params(axis='y', length=0)
-    
-    # 5b. Set up the Left-Hand (PD) Axis Ticks
-    # Use the 'scale' to set the interval between the PD labels (e.g., scale=1.0 means 1% spacing)
-    min_PD = np.min(all_PD_values)
-    max_PD = np.max(all_PD_values)
-    
-    # Determine tick range for the base curve (i=0)
-    min_tick = np.floor(min_PD / scale) * scale
-    max_tick = np.ceil(max_PD / scale) * scale
-    
-    # Generate the base ticks and filter to only show relevant ticks for the bottom curve
-    base_pd_ticks = np.arange(min_tick, max_tick + scale * 0.1, scale)
-    visible_pd_ticks = base_pd_ticks[(base_pd_ticks >= min_PD - 0.1) & (base_pd_ticks <= max_PD + 0.5)]
-
-    ax.set_yticks(visible_pd_ticks)
-    pd_labels = [f"{t:.0f}\\%" for t in visible_pd_ticks]
-    ax.set_yticklabels(pd_labels)
-    
-    # 6. Set Title
-    title = (f"Waterfall Plot of Percentage Difference (PD)\n"
-             f"Background $I_0$ averaged from $XPS$ at ${xps_bg_1}$ and ${xps_bg_2}$")
-    ax.set_title(title, fontsize=14)
-    ax.set_xlabel('$q$ (Normalized Radial Distance)', fontsize=12)
-    ax.set_ylabel('Percentage Difference ($\%PD$)', fontsize=12, loc='top')
-
-    # 7. Final Touches (Grid lines for base PD level)
-    ax.yaxis.grid(False) 
-    for tick in visible_pd_ticks:
-        ax.axhline(tick, color='gray', linestyle=':', linewidth=0.5, zorder=0)
-
-    plt.tight_layout()
-    plt.savefig(filename)
-    plt.close(fig)
-
-import numpy as np
-import matplotlib.pyplot as plt
-
-def plot_waterfall_diffraction_final(data: list, xps_0: float, pixel_to_q: float, scale: float, width_to_height_ratio: float, filename: str = 'waterfall_plot_final.png'):
+def plot_waterfall_diffraction(data: list, xps_0: float, pixel_to_q: float, scale: float, width_to_height_ratio: float, filename: str = 'waterfall_plot_final.png'):
     """
     Generates the final customized waterfall plot of Percentage Difference (PD).
 
@@ -185,6 +60,20 @@ def plot_waterfall_diffraction_final(data: list, xps_0: float, pixel_to_q: float
         
         # Plot the curve
         ax.plot(q, PD_curve, linewidth=1.5)
+
+        if has_std_dev := (len(group) > 3):
+            std_dev = np.array(group[3]) / I_0 * np.sqrt(2/2700) * 100  # Propagate std to PD
+            # Calculate upper and lower bounds for ±3σ (99.7% confidence)
+            upper_bound = PD + 3 * std_dev + vertical_offset
+            lower_bound = PD - 3 * std_dev + vertical_offset
+            # Plot the shaded area for ±3σ
+            ax.fill_between(
+                q,               
+                lower_bound,         
+                upper_bound,         
+                color = '#A23B72',   
+                alpha=0.05,           # transparency level
+            )
         
         # ALIGNMENT: Draw the horizontal baseline (PD=0) at the curve's offset position
         ax.axhline(vertical_offset, color='gray', linestyle='--', linewidth=0.8, zorder=0)

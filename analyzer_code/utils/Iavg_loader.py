@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def load_intensity_profiles(analysis_dir: str) -> List[Tuple[float, np.ndarray, np.ndarray]]:
+def load_intensity_profiles(analysis_dir: str , std_check: bool) -> List[Tuple[float, np.ndarray, np.ndarray]]:
     """
     Load all intensity_profile CSV files and organize data.
     
@@ -77,8 +77,8 @@ def load_intensity_profiles(analysis_dir: str) -> List[Tuple[float, np.ndarray, 
     for xps_value, file_list in sorted(xps_groups.items()):
         # Select the latest file (highest I value, or most recent timestamp)
         if len(file_list) > 1:
-            # Sort by I value (descending), then by timestamp (descending)
-            file_list.sort(key=lambda x: (x['i_value'], x['timestamp']), reverse=True)
+            # Sort by timestamp (descending) only
+            file_list.sort(key=lambda x: x['timestamp'], reverse=True)
             logger.info(f"XPS {xps_value:.5f}: {len(file_list)} files found, "
                        f"selecting I={file_list[0]['i_value']:.5f}")
         
@@ -99,6 +99,10 @@ def load_intensity_profiles(analysis_dir: str) -> List[Tuple[float, np.ndarray, 
             
             # Extract average intensities
             avg_intensities = df['average'].values.astype(np.float64)
+
+            if std_check:
+                # Extract intensity stds
+                std_intensities = df['std'].values.astype(np.float64)
             
             # Create radial distances (assuming 1 pixel per bin starting from 0)
             # You might want to adjust this based on your actual pixel-to-distance calibration
@@ -111,8 +115,11 @@ def load_intensity_profiles(analysis_dir: str) -> List[Tuple[float, np.ndarray, 
             if len(avg_intensities) != 512:
                 logger.warning(f"Expected 512 bins, got {len(avg_intensities)} in {selected_file.name}")
             
-            # Add to results
-            result_data.append((xps_value, avg_intensities, radial_distances))
+            if std_check:
+                result_data.append((xps_value, avg_intensities, radial_distances, std_intensities))
+            else:
+                # Add to results
+                result_data.append((xps_value, avg_intensities, radial_distances))
             
             logger.debug(f"Loaded XPS {xps_value:.5f}: {len(avg_intensities)} bins, "
                         f"I={file_list[0]['i_value']:.5f}")
@@ -127,7 +134,6 @@ def load_intensity_profiles(analysis_dir: str) -> List[Tuple[float, np.ndarray, 
     logger.info(f"Successfully loaded {len(result_data)} intensity profiles")
     
     return result_data
-
 
 def load_intensity_profiles_with_metadata(analysis_dir: str) -> List[dict]:
     """
@@ -208,7 +214,6 @@ def load_intensity_profiles_with_metadata(analysis_dir: str) -> List[dict]:
     
     return result_list
 
-
 # Example usage and helper functions
 def save_combined_profiles(data_list: List[Tuple[float, np.ndarray, np.ndarray]], 
                           output_path: str):
@@ -237,7 +242,6 @@ def save_combined_profiles(data_list: List[Tuple[float, np.ndarray, np.ndarray]]
     df = pd.DataFrame(all_data)
     df.to_csv(output_path, index=False)
     logger.info(f"Saved combined profiles to {output_path}")
-
 
 def plot_intensity_profiles(data_list: List[Tuple[float, np.ndarray, np.ndarray]], 
                            max_profiles: int = 10):
@@ -272,7 +276,6 @@ def plot_intensity_profiles(data_list: List[Tuple[float, np.ndarray, np.ndarray]
         
     except ImportError:
         logger.warning("Matplotlib not installed. Skipping plot.")
-
 
 # Main execution example
 if __name__ == "__main__":

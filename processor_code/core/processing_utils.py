@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass, asdict
 import numpy as np
-import tables  # PyTables
+#import tables  # PyTables
 
 @dataclass
 class ProcessingConfig:

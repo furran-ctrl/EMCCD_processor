@@ -32,7 +32,7 @@ def convert_parquet_to_csv(input_path: str, output_path: str, index: bool = Fals
 if __name__ == '__main__':
     
     # Define placeholder paths
-    input_file = r'C:\Users\86177\Desktop\streaking\analysis_parallel_time\xps_221.01046\normalized_xps_221.01046.parquet'
-    output_file = r'C:\Users\86177\Desktop\analyze.csv'
+    input_file = r'C:\Users\ab177\Desktop\diffraction_results\1004\analysis_parallel_time\xps_173.03500\xps_173.03500.parquet'
+    output_file = r'C:\Users\ab177\Desktop\analyze.csv'
 
     convert_parquet_to_csv(input_file, output_file, index=False)

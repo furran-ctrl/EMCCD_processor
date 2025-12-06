@@ -22,7 +22,7 @@ class RadialProfileFilter:
     """
     
     # Radial bins to check for MAD filtering (005, 010, 015, ..., 060)
-    MAD_BINS = [f"radial_bin_{i:03d}" for i in range(5, 65, 5)]
+    MAD_BINS = [f"radial_bin_{i:03d}" for i in range(60, 121, 20)]
     
     # Constant for normal distribution approximation
     MAD_TO_SIGMA = 1.4826
@@ -103,8 +103,14 @@ class RadialProfileFilter:
         # Identify radial bin columns
         radial_columns = [col for col in df.columns if col.startswith('radial_bin_')]
         
-        # Check for NaN in radial bins
-        nan_mask = df[radial_columns].isna().any(axis=1)
+        # Filter to only include columns with numbers greater than 040
+        radial_columns_after_040 = [
+            col for col in radial_columns 
+            if col.replace('radial_bin_', '').isdigit() and int(col.replace('radial_bin_', '')) > 40
+        ]
+
+        # Check for NaN only in radial bins after 040
+        nan_mask = df[radial_columns_after_040].isna().any(axis=1)
         
         if nan_mask.any():
             df_filtered = df[~nan_mask].copy()
