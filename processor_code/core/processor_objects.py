@@ -178,10 +178,11 @@ class XPSGroupProcessor:
             #     self.center_config[1]   # initial_guess
             # )
             
-            center = image_file.find_center_with_std(
-                radial_masks=self.center_config[0],  # ring_mask
-                initial_guess=self.center_config[1]   # initial_guess
-            )
+            with timer("center_finding"):
+                center = image_file.find_center_with_std(
+                    radial_masks=self.center_config[0],  # ring_mask
+                    initial_guess=self.center_config[1]   # initial_guess
+                )
             
             # Calculate azimuthal average
             #with timer('azimuthal_avg'):

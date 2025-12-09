@@ -7,8 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
-def load_intensity_profiles(analysis_dir: str , std_check: bool) -> List[Tuple[float, np.ndarray, np.ndarray]]:
+def load_intensity_profiles(analysis_dir: str , std_check: bool , calibration_factor: float , xps_0: float) -> List[Tuple[float, np.ndarray, np.ndarray]]:
     """
     Load all intensity_profile CSV files and organize data.
     
@@ -16,6 +15,10 @@ def load_intensity_profiles(analysis_dir: str , std_check: bool) -> List[Tuple[f
     -----------
     analysis_dir : str
         Path to the analysis directory
+    calibration_factor : float
+        Pixel to q factor 
+    xps_0 : float
+        Pre-determined time0 xps
         
     Returns:
     --------
@@ -30,6 +33,8 @@ def load_intensity_profiles(analysis_dir: str , std_check: bool) -> List[Tuple[f
       based on timestamp or highest I value in filename
     - Radial distances are extracted from bin numbers (assuming 1 pixel per bin)
     """
+    C0 = 299792458
+
     analysis_path = Path(analysis_dir)
     
     if not analysis_path.exists():
@@ -94,6 +99,8 @@ def load_intensity_profiles(analysis_dir: str , std_check: bool) -> List[Tuple[f
                 logger.error(f"Missing required columns in {selected_file.name}")
                 continue
             
+            timestamp = (xps_0 - xps_value) / (C0 * 0.5 * 10 ** -9)
+
             # Sort by bin_number to ensure correct order
             df = df.sort_values('bin_number')
             
@@ -101,25 +108,25 @@ def load_intensity_profiles(analysis_dir: str , std_check: bool) -> List[Tuple[f
             avg_intensities = df['average'].values.astype(np.float64)
 
             if std_check:
-                # Extract intensity stds
-                std_intensities = df['std'].values.astype(np.float64)
+                # Extract intensity sems
+                sem_intensities = df['sem'].values.astype(np.float64)
             
             # Create radial distances (assuming 1 pixel per bin starting from 0)
             # You might want to adjust this based on your actual pixel-to-distance calibration
-            radial_distances = df['bin_number'].values.astype(np.float64)
+            raw_radial_distances = df['bin_number'].values.astype(np.float64)
             
             # Alternative: If you have actual distance calibration, you could do:
-            # radial_distances = df['bin_number'].values * calibration_factor
+            radial_distances = raw_radial_distances * calibration_factor
             
             # Validate data shape (should be 512 bins)
             if len(avg_intensities) != 512:
                 logger.warning(f"Expected 512 bins, got {len(avg_intensities)} in {selected_file.name}")
             
             if std_check:
-                result_data.append((xps_value, avg_intensities, radial_distances, std_intensities))
+                result_data.append((timestamp, avg_intensities, radial_distances, sem_intensities))
             else:
                 # Add to results
-                result_data.append((xps_value, avg_intensities, radial_distances))
+                result_data.append((timestamp, avg_intensities, radial_distances))
             
             logger.debug(f"Loaded XPS {xps_value:.5f}: {len(avg_intensities)} bins, "
                         f"I={file_list[0]['i_value']:.5f}")

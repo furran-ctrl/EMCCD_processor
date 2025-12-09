@@ -6,6 +6,7 @@ from scipy.optimize import minimize
 
 from processor_code.utils.gaussian_fitting import fit_circular_gaussian_ring
 from processor_code.core.mask_class import RadialMasks, RingMask
+from processor_code.utils.timer import timer
 
 class EMCCDimage:
     """
@@ -665,31 +666,25 @@ class EMCCDimage:
         total_weighted_std = 0.0
         valid_bins = 0
         
+        #with timer("std_calc"):
         for i, mask in enumerate(radial_masks.masks):
             # Extract intensities using precomputed mask
             intensities = shifted_data[mask]
-            
-            # Filter out NaN values
-            valid_intensities = intensities[~np.isnan(intensities)]
-            
+
             # Need at least 2 points to calculate standard deviation
-            if len(valid_intensities) >= 2:
-                std_dev = np.std(valid_intensities)
+            if len(intensities) >= 2:
+                std_dev = np.nanstd(intensities)
                 bin_center = radial_masks.bin_centers[i]
                 weighted_std = (bin_center ** 2) * std_dev
                 total_weighted_std += weighted_std
                 valid_bins += 1
         
-        # Return average if we have valid bins, otherwise return infinity
-        if valid_bins > 0:
-            return total_weighted_std / valid_bins
-        else:
-            return np.inf
+        return total_weighted_std / valid_bins
 
     def find_center_with_std(self,
                                     radial_masks: RadialMasks,
                                     initial_guess: Tuple[float, float],
-                                    max_iter: int = 30) -> Tuple[float, float]:
+                                    max_iter: int = 50) -> Tuple[float, float]:
         """
         Find diffraction center by minimizing weighted standard deviation.
         
@@ -723,11 +718,12 @@ class EMCCDimage:
             fun=self.calculate_std_sum_with_masks,
             x0=[guess_x, guess_y],
             args=(radial_masks,),
-            method='Nelder-Mead',  # Works well for 2D problems, doesn't need gradients
+            method='Nelder-Mead', 
             options={
                 'maxiter': max_iter,
                 'disp': False,
-                'xatol': 0.5,  # Coordinate tolerance
+                'xatol': 1,  # Coordinate tolerance
+                'yatol': 1,
             }
         )
         
@@ -811,7 +807,6 @@ class EMCCDimage:
         shift_y = int(round(center_y - mask_center_y))
 
         # Shift image data
-        from scipy.ndimage import shift
         shifted_data = shift(self.processed_data, 
                             shift=(-shift_y, -shift_x), 
                             order=0,

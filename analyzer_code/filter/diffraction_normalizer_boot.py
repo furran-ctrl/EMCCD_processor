@@ -1,3 +1,4 @@
+#This is an alternative version of diffraction_normalizer with bootstrap for filtering.
 import pandas as pd
 import numpy as np
 import os
@@ -8,6 +9,8 @@ from typing import List, Tuple, Optional, Dict
 import csv
 import statistics
 from scipy.stats import bootstrap
+import warnings
+warnings.filterwarnings('ignore', category=FutureWarning)  # Suppress bootstrap warnings
 
 # Set up logging
 logging.basicConfig(
@@ -107,25 +110,72 @@ class DiffractionNormalizer:
         df_with_factors['norm_factor'] = norm_factors
         
         # Calculate average normalization factor
-        avg_norm_factor = statistics.mean(norm_factors)
+        avg_norm_factor = statistics.harmonic_mean(norm_factors)
         
         logger.info(f"Calculated normalization factors: avg={avg_norm_factor:.5f}, "
                    f"min={norm_factors.min():.5f}, max={norm_factors.max():.5f}")
         
         return df_with_factors, avg_norm_factor
     
-    def calculate_norm_factor_thresholds(self, norm_factors: pd.Series) -> Dict[str, float]:
+    def calculate_norm_factor_bootstrap_ci(self, norm_factors: pd.Series, n_bootstrap: int = 10000) -> Dict[str, float]:
         """
-        Calculate MAD-based thresholds for normalization factors.
+        Calculate 95% confidence interval for normalization factors using bootstrap.
         
         Parameters:
         -----------
         norm_factors : pd.Series
             Series of normalization factors
+        n_bootstrap : int
+            Number of bootstrap samples
             
         Returns:
         --------
-        Dictionary with median, MAD, sigma, and thresholds
+        Dictionary with bootstrap statistics and CI
+        """
+        # Convert to numpy array for bootstrap
+        data = (norm_factors.values,)
+        
+        try:
+            # Calculate bootstrap confidence interval
+            bootstrap_result = bootstrap(
+                data, 
+                np.mean, 
+                n_resamples=n_bootstrap,
+                confidence_level=0.95,
+                method='BCa'  # Bias-corrected and accelerated
+            )
+            
+            ci_lower = bootstrap_result.confidence_interval.low
+            ci_upper = bootstrap_result.confidence_interval.high
+            
+            # Calculate additional statistics
+            median_val = np.median(norm_factors)
+            mean_val = np.mean(norm_factors)
+            std_val = np.std(norm_factors)
+            
+            thresholds = {
+                'mean': mean_val,
+                'median': median_val,
+                'std': std_val,
+                'ci_lower': ci_lower,
+                'ci_upper': ci_upper,
+                'n_samples': len(norm_factors),
+                'n_bootstrap': n_bootstrap
+            }
+            
+            logger.info(f"Bootstrap 95% CI: [{ci_lower:.2f}, {ci_upper:.2f}], "
+                    f"mean={mean_val:.2f}, std={std_val:.2f}, n={len(norm_factors)}")
+            
+            return thresholds
+            
+        except Exception as e:
+            logger.error(f"Bootstrap calculation failed: {e}")
+            # Fall back to MAD method if bootstrap fails
+            return self.calculate_norm_factor_thresholds_fallback(norm_factors)
+
+    def calculate_norm_factor_thresholds_fallback(self, norm_factors: pd.Series) -> Dict[str, float]:
+        """
+        Fallback method using MAD if bootstrap fails.
         """
         # Calculate median
         median_val = np.median(norm_factors)
@@ -137,55 +187,62 @@ class DiffractionNormalizer:
         # Convert MAD to sigma (1.4826 for normal distribution)
         sigma = mad * 1.4826
         
-        # Calculate ±2σ thresholds
+        # Calculate ±2σ thresholds as approximate 95% CI
         lower_threshold = median_val - 2 * sigma
         upper_threshold = median_val + 2 * sigma
         
         thresholds = {
+            'mean': np.mean(norm_factors),
             'median': median_val,
-            'mad': mad,
-            'sigma': sigma,
-            'lower': lower_threshold,
-            'upper': upper_threshold
+            'std': np.std(norm_factors),
+            'ci_lower': lower_threshold,
+            'ci_upper': upper_threshold,
+            'method': 'MAD_fallback',
+            'n_samples': len(norm_factors)
         }
         
-        logger.info(f"Norm factor thresholds: median={median_val:.2f}, "
-                f"±2σ range=[{lower_threshold:.2f}, {upper_threshold:.2f}]")
+        logger.warning(f"Using MAD fallback: 95% CI approx=[{lower_threshold:.2f}, {upper_threshold:.2f}]")
         
         return thresholds
-    
-    def filter_by_norm_factor_mad(self, df: pd.DataFrame, thresholds: Dict[str, float]) -> pd.DataFrame:
+
+    def filter_by_norm_factor_bootstrap(self, df: pd.DataFrame, thresholds: Dict[str, float]) -> pd.DataFrame:
         """
-        Filter rows based on normalization factor MAD thresholds.
+        Filter rows based on bootstrap 95% confidence interval.
         
         Parameters:
         -----------
         df : pd.DataFrame
             DataFrame with 'norm_factor' column
         thresholds : dict
-            Dictionary with threshold values
+            Dictionary with threshold values from bootstrap
             
         Returns:
         --------
         Filtered DataFrame
         """
-        # Create mask for rows within ±2σ
-        mask = (df['norm_factor'] >= thresholds['lower']) & \
-            (df['norm_factor'] <= thresholds['upper'])
+        # Create mask for rows within 95% CI
+        mask = (df['norm_factor'] >= thresholds['ci_lower']) & \
+            (df['norm_factor'] <= thresholds['ci_upper'])
         
         removed_count = (~mask).sum()
         retained_count = mask.sum()
         
         if removed_count > 0:
-            logger.info(f"Norm factor MAD filtering: removed {removed_count} rows, "
-                    f"retained {retained_count} rows ({retained_count/len(df)*100:.1f}%)")
+            logger.info(f"Bootstrap CI filtering: removed {removed_count} rows ({removed_count/len(df)*100:.1f}%), "
+                    f"retained {retained_count} rows")
             
-            # Log some statistics about removed values
+            # Log details about removed values
             removed_factors = df.loc[~mask, 'norm_factor']
-            logger.debug(f"Removed norm factors range: [{removed_factors.min():.2f}, "
-                        f"{removed_factors.max():.2f}]")
+            logger.debug(f"Removed norm factors: min={removed_factors.min():.2f}, "
+                        f"max={removed_factors.max():.2f}, "
+                        f"mean={removed_factors.mean():.2f}")
+            
+            # Log which side of CI the outliers are on
+            below_ci = (df['norm_factor'] < thresholds['ci_lower']).sum()
+            above_ci = (df['norm_factor'] > thresholds['ci_upper']).sum()
+            logger.debug(f"Outliers: {below_ci} below CI, {above_ci} above CI")
         else:
-            logger.info("All rows passed norm factor MAD filtering")
+            logger.info("All rows passed bootstrap CI filtering")
         
         return df[mask].copy()
 
@@ -253,72 +310,9 @@ class DiffractionNormalizer:
                    f"({len(factor_df)} entries)")
     
     def calculate_intensity_profile_stats(self, df_normalized: pd.DataFrame, 
-                                         avg_norm_factor: float,
-                                         xps_dir: Path, xps_value: float):
-        """
-        Calculate average and std for each radial bin and save to CSV.
-        
-        Parameters:
-        -----------
-        df_normalized : pd.DataFrame
-            Normalized DataFrame with radial_bin_* columns
-        avg_norm_factor : float
-            Average normalization factor
-        xps_dir : Path
-            Directory to save the CSV file in
-        xps_value : float
-            XPS value for this group
-        """
-        # Identify radial bin columns
-        radial_columns = [col for col in df_normalized.columns if col.startswith('radial_bin_')]
-        
-        # Sort columns to ensure consistent bin order
-        radial_columns.sort()
-        
-        # Calculate statistics
-        averages = []
-        stds = []
-        sems = []
-        bin_numbers = []
-        
-        for col in radial_columns:
-            # Extract bin number from column name
-            bin_num = int(col.replace('radial_bin_', ''))
-            
-            # Calculate average and std for this bin
-            avg_val = df_normalized[col].mean()
-            std_val = df_normalized[col].std()
-            sem_val = std_val / np.sqrt(len(df_normalized[col]))
-            
-            averages.append(avg_val)
-            stds.append(std_val)
-            sems.append(sem_val)
-            bin_numbers.append(bin_num)
-        
-        # Create DataFrame for statistics
-        stats_df = pd.DataFrame({
-            'bin_number': bin_numbers,
-            'average': averages,
-            'std': stds,
-            'sem': sems
-        })
-        
-        # Create filename with intensity profile
-        profile_filename = f"intensity_profile_xps{xps_value:.5f}_I{avg_norm_factor:.5f}.csv"
-        profile_path = xps_dir / profile_filename
-        
-        # Save to CSV
-        stats_df.to_csv(profile_path, index=False, float_format='%.5f')
-        
-        logger.info(f"Saved intensity profile statistics to {profile_filename} "
-                   f"({len(stats_df)} bins)")
-        
-        return stats_df
-    
-    def calculate_intensity_bootstrap_stats(self, df_normalized: pd.DataFrame, 
                                         avg_norm_factor: float,
                                         xps_dir: Path, xps_value: float,
-                                        n_bootstrap: int = 2000):
+                                        n_bootstrap: int = 5000):
         """
         Calculate bootstrap statistics for each radial bin and save to CSV.
         
@@ -370,8 +364,8 @@ class DiffractionNormalizer:
                     (data,), 
                     np.mean, 
                     n_resamples=n_bootstrap,
-                    confidence_level=0.95,
-                    method='percentile'
+                    confidence_level=0.9995,
+                    method='BCa'
                 )
                 ci_lower = bootstrap_result.confidence_interval.low
                 ci_upper = bootstrap_result.confidence_interval.high
@@ -380,7 +374,7 @@ class DiffractionNormalizer:
                 # Use parametric approximation if bootstrap fails
                 ci_lower = avg_val - 1.96 * sem_val
                 ci_upper = avg_val + 1.96 * sem_val
-
+            
             # Store results
             averages.append(avg_val)
             stds.append(std_val)
@@ -389,9 +383,9 @@ class DiffractionNormalizer:
             ci_uppers.append(ci_upper)
             bin_numbers.append(bin_num)
             
-            # Log progress for every 100 bins
-            if (i + 1) % 100 == 0:
-                logger.debug(f"Processed {i + 1}/{len(radial_columns)} bins")
+            # Log progress for every 50 bins
+            # if (i + 1) % 50 == 0:
+            #     logger.debug(f"Processed {i + 1}/{len(radial_columns)} bins")
         
         # Create DataFrame for statistics
         stats_df = pd.DataFrame({
@@ -399,8 +393,8 @@ class DiffractionNormalizer:
             'average': averages,
             'std': stds,
             'sem': sems,
-            'lower_bound': ci_lowers,
-            'upper_bound': ci_uppers
+            'ci_lower': ci_lowers,
+            'ci_upper': ci_uppers
         })
         
         # Create filename with intensity profile
@@ -414,19 +408,10 @@ class DiffractionNormalizer:
                 f"({len(stats_df)} bins)")
         
         return stats_df
-
-    def process_xps_group(self, filtered_file: Path, statistic_type: str) -> Tuple[bool, str]:
+    
+    def process_xps_group(self, filtered_file: Path, n_bootstrap: int = 10000) -> Tuple[bool, str]:
         """
-        Process a single XPS group: normalize and calculate statistics.
-        
-        Parameters:
-        -----------
-        filtered_file : Path
-            Path to the filtered parquet file
-            
-        Returns:
-        --------
-        (success: bool, message: str)
+        Process a single XPS group with bootstrap filtering and statistics.
         """
         try:
             # Extract XPS value from filename
@@ -441,62 +426,93 @@ class DiffractionNormalizer:
             if df is None:
                 return False, f"Failed to load data from {filtered_file.name}"
             
+            initial_count = len(df)
+            
             # Step 1: Calculate normalization factors
             df_with_factors, avg_norm_factor = self.calculate_normalization_factors(df)
             
-            # Step 2: Filter based on norm factor MAD (±2σ)
-            norm_factor_thresholds = self.calculate_norm_factor_thresholds(df_with_factors['norm_factor'])
-            df_filtered = self.filter_by_norm_factor_mad(df_with_factors, norm_factor_thresholds)
+            # Step 2: Filter based on norm factor 95% CI bootstrap
+            bootstrap_thresholds = self.calculate_norm_factor_bootstrap_ci(
+                df_with_factors['norm_factor'], 
+                n_bootstrap=n_bootstrap
+            )
+            df_filtered = self.filter_by_norm_factor_bootstrap(df_with_factors, bootstrap_thresholds)
+            
+            # Check if we have enough data after filtering
+            if len(df_filtered) < 10:  # Minimum for meaningful bootstrap
+                logger.warning(f"Insufficient data after bootstrap filtering: {len(df_filtered)} rows")
+                return False, f"Insufficient data after bootstrap filtering ({len(df_filtered)} rows)"
+            
             # Update average norm factor based on filtered data
-            # Sum the specified radial bins for each row
-            norm_factors = df_filtered[self.NORMALIZATION_BINS].sum(axis=1)
-            # Calculate average normalization factor
-            avg_norm_factors = df_filtered[self.AVG_TUNING_BINS].sum(axis=1)
-            #avg_norm_factor_filtered = 100 / statistics.mean(avg_norm_factors/norm_factors)
-            avg_norm_factor_filtered = 100
-
-            # Step 3: Save normalization factors to CSV
+            avg_norm_factor_filtered = df_filtered['norm_factor'].mean()
+            
+            logger.info(f"Bootstrap filtering: {initial_count} → {len(df_filtered)} rows, "
+                    f"retention={len(df_filtered)/initial_count*100:.1f}%, "
+                    f"avg_norm_factor: {avg_norm_factor:.2f} → {avg_norm_factor_filtered:.2f}")
+            
+            # Step 3: Save normalization factors to CSV (using filtered data)
             self.save_normalization_factors(df_filtered, filtered_file.parent, xps_value)
             
-            # Step 4: Normalize radial profiles
+            # Step 4: Normalize radial profiles (using filtered data and updated avg)
             df_normalized = self.normalize_radial_profiles(df_filtered, avg_norm_factor_filtered)
             
-            # Step 5: Calculate intensity profile statistics and save to CSV
-            if statistic_type == 'normal':
-                stats_df = self.calculate_intensity_profile_stats(
-                    df_normalized, avg_norm_factor_filtered, filtered_file.parent, xps_value
-                )
-            elif statistic_type == 'bootstrap':
-                stats_df = self.calculate_intensity_bootstrap_stats(
-                    df_normalized, avg_norm_factor_filtered, filtered_file.parent, xps_value
-                )
+            # Step 5: Calculate intensity profile statistics with bootstrap and save to CSV
+            stats_df = self.calculate_intensity_profile_stats(
+                df_normalized, 
+                avg_norm_factor_filtered, 
+                filtered_file.parent, 
+                xps_value,
+                n_bootstrap=n_bootstrap
+            )
             
-            # Optional: Save normalized data to new parquet file
-            normalized_filename = f"normalized_xps_{xps_value:.5f}.parquet"
-            normalized_path = filtered_file.parent / normalized_filename
-            df_normalized.to_parquet(normalized_path, index=False)
-            logger.info(f"Saved normalized data to {normalized_filename}")
+            # Save additional bootstrap info
+            bootstrap_info = {
+                'xps_value': xps_value,
+                'initial_samples': initial_count,
+                'filtered_samples': len(df_filtered),
+                'avg_norm_factor_before': avg_norm_factor,
+                'avg_norm_factor_after': avg_norm_factor_filtered,
+                'bootstrap_ci_lower': bootstrap_thresholds['ci_lower'],
+                'bootstrap_ci_upper': bootstrap_thresholds['ci_upper'],
+                'bootstrap_method': 'BCa',
+                'n_bootstrap': n_bootstrap
+            }
+            
+            # Save bootstrap info to JSON
+            import json
+            info_filename = f"bootstrap_info_xps{xps_value:.5f}.json"
+            info_path = filtered_file.parent / info_filename
+            with open(info_path, 'w') as f:
+                json.dump(bootstrap_info, f, indent=2, default=str)
+            
+            # Optional: Save filtered data with norm factors
+            filtered_with_factors_filename = f"filtered_with_factors_xps{xps_value:.5f}.parquet"
+            filtered_with_factors_path = filtered_file.parent / filtered_with_factors_filename
+            df_filtered.to_parquet(filtered_with_factors_path, index=False)
+            logger.info(f"Saved filtered data with norm factors to {filtered_with_factors_filename}")
             
             # Log summary
             logger.info(f"Successfully processed XPS {xps_value:.5f}: "
-                       f"{len(df)} files, avg_norm_factor={avg_norm_factor:.5f}")
+                    f"{initial_count} → {len(df_filtered)} files, "
+                    f"avg_norm_factor={avg_norm_factor_filtered:.5f}")
             
-            return True, f"Processed {len(df)} files, avg_norm_factor={avg_norm_factor:.5f}"
+            return True, (f"Processed {len(df_filtered)}/{initial_count} files, "
+                        f"CI=[{bootstrap_thresholds['ci_lower']:.2f},{bootstrap_thresholds['ci_upper']:.2f}], "
+                        f"avg_norm_factor={avg_norm_factor_filtered:.5f}")
             
         except Exception as e:
             logger.error(f"Error processing {filtered_file.name}: {e}")
             return False, str(e)
     
-    def run_normalization(self, statistic_type: str) -> dict:
+    def run_normalization(self, n_bootstrap: int = 10000) -> dict:
         """
-        Run the normalization process on all filtered XPS files.
+        Run the normalization process with bootstrap statistics.
         
         Parameters:
         -----------
-        statistic_type : str
-            "normal" for avg, std, sem
-            "bootstrap" for n_bootsrap 2000 with 95 CI concerning avg, lower/upper_bounds and traditional statistic
-
+        n_bootstrap : int
+            Number of bootstrap samples for CI calculation
+            
         Returns:
         --------
         Dictionary with processing results for each XPS group
@@ -510,10 +526,12 @@ class DiffractionNormalizer:
             logger.error("No filtered parquet files found. Run the first filter step first.")
             return results
         
+        logger.info(f"Using bootstrap with n={n_bootstrap} samples")
+        
         # Process each XPS group
         for filtered_file in filtered_files:
             logger.info(f"Processing {filtered_file.name}...")
-            success, message = self.process_xps_group(filtered_file, statistic_type)
+            success, message = self.process_xps_group(filtered_file, n_bootstrap)
             results[filtered_file.name] = {
                 'success': success,
                 'message': message,
@@ -595,42 +613,3 @@ class DiffractionNormalizer:
         else:
             logger.warning("No successful results to summarize")
             return None
-
-
-def main():
-    """
-    Example usage of the DiffractionNormalizer class.
-    """
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='Normalize diffraction data and calculate intensity profiles')
-    parser.add_argument('analysis_dir', type=str, help='Path to analysis directory')
-    parser.add_argument('--summary', action='store_true', help='Generate summary report')
-    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
-    
-    args = parser.parse_args()
-    
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
-    
-    # Initialize and run the normalizer
-    normalizer = DiffractionNormalizer(args.analysis_dir)
-    results = normalizer.run_normalization()
-    
-    # Generate summary if requested
-    if args.summary:
-        normalizer.generate_summary_report(results)
-    
-    # Print processing results
-    print("\n" + "="*60)
-    print("NORMALIZATION RESULTS")
-    print("="*60)
-    for filename, result in results.items():
-        status = "✓ SUCCESS" if result['success'] else "✗ FAILED"
-        print(f"{filename}: {status}")
-        print(f"  Message: {result['message']}")
-        print()
-
-
-if __name__ == "__main__":
-    main()

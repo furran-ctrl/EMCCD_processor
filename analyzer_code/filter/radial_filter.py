@@ -5,6 +5,7 @@ import glob
 from pathlib import Path
 import logging
 from typing import List, Tuple, Optional
+from scipy.stats import bootstrap
 
 # Set up logging
 logging.basicConfig(
@@ -21,13 +22,13 @@ class RadialProfileFilter:
     Step 2: Remove rows where specific radial bins are outside ±4σ using MAD
     """
     
-    # Radial bins to check for MAD filtering (005, 010, 015, ..., 060)
-    MAD_BINS = [f"radial_bin_{i:03d}" for i in range(60, 121, 20)]
+    # Radial bins to check for filtering (005, 010, 015, ..., 060)
+    FILTER_BINS = [f"radial_bin_{i:03d}" for i in range(60, 121, 20)]
     
     # Constant for normal distribution approximation
     MAD_TO_SIGMA = 1.4826
     
-    def __init__(self, analysis_dir: str):
+    def __init__(self, analysis_dir: str, n_boot: int = 5000, ci_level: float = 0.9995, random_seed: int = 42):
         """
         Initialize the filter with the analysis directory.
         
@@ -36,6 +37,11 @@ class RadialProfileFilter:
         analysis_dir : str
             Path to the analysis directory (e.g., 'results/analysis_{TIMESTAMP}')
         """
+        self.n_boot = n_boot
+        self.ci_level = ci_level
+        self.random_seed = random_seed
+        self.thresholds = {}  # Will store (lower, upper) for each bin
+
         self.analysis_dir = Path(analysis_dir)
         if not self.analysis_dir.exists():
             raise FileNotFoundError(f"Analysis directory not found: {analysis_dir}")
@@ -106,7 +112,7 @@ class RadialProfileFilter:
         # Filter to only include columns with numbers greater than 040
         radial_columns_after_040 = [
             col for col in radial_columns 
-            if col.replace('radial_bin_', '').isdigit() and int(col.replace('radial_bin_', '')) > 40
+            if col.replace('radial_bin_', '').isdigit() and int(col.replace('radial_bin_', '')) > 60
         ]
 
         # Check for NaN only in radial bins after 040
@@ -140,7 +146,7 @@ class RadialProfileFilter:
         """
         thresholds = {}
         
-        for bin_name in self.MAD_BINS:
+        for bin_name in self.FILTER_BINS:
             if bin_name not in df.columns:
                 logger.warning(f"Column {bin_name} not found in dataframe")
                 continue
@@ -219,7 +225,88 @@ class RadialProfileFilter:
         
         return df[valid_mask].copy()
     
-    def process_xps_directory(self, xps_dir: Path) -> Tuple[bool, str]:
+    def calculate_bootstrap_thresholds(self, df: pd.DataFrame) -> dict:
+        """
+        Compute bootstrap 95% CI bounds for each radial bin.
+        Values outside these bounds will be considered outliers.
+        """
+        thresholds = {}
+        rng = np.random.default_rng(self.random_seed)
+
+        for bin_name in self.FILTER_BINS:
+            if bin_name not in df.columns:
+                logger.warning(f"Column {bin_name} not found in dataframe")
+                continue
+
+            values = df[bin_name].dropna().values  # Bootstrap only on available data
+            if len(values) < 10:
+                logger.warning(f"{bin_name} has <10 valid points. Skipping bootstrap.")
+                continue
+
+            # Bootstrap the mean to get its sampling distribution
+            # We use the percentile method (simple and robust)
+            boot = bootstrap(
+                (values,),
+                statistic=np.median,
+                n_resamples=self.n_boot,
+                confidence_level=self.ci_level,
+                method='percentile',
+                random_state=rng
+            )
+
+            ci_low, ci_high = boot.confidence_interval
+            median_val = np.median(values)
+            bootstrap_sem = boot.standard_error
+
+            thresholds[bin_name] = {
+                'median': median_val,
+                'bootstrap_sem': bootstrap_sem,
+                'lower': ci_low,
+                'upper': ci_high,
+                'n_samples': len(values)
+            }
+
+            logger.debug(f"{bin_name}: n={len(values)}, "
+                        f"median={median_val:.3f}, "
+                        f"95% CI = [{ci_low:.3f}, {ci_high:.3f}]")
+
+        self.thresholds = thresholds
+        return thresholds
+
+    def filter_by_bootstrap_ci(self, df: pd.DataFrame, thresholds: dict = None) -> pd.DataFrame:
+        """
+        Remove rows where any radial bin value falls outside its bootstrap 95% CI.
+        """
+        if thresholds is None:
+            if not self.thresholds:
+                raise ValueError("No thresholds computed. Run calculate_bootstrap_thresholds() first.")
+            thresholds = self.thresholds
+
+        if not thresholds:
+            logger.warning("No valid thresholds. Returning original dataframe.")
+            return df.copy()
+
+        valid_mask = pd.Series(True, index=df.index)
+
+        for bin_name, thresh in thresholds.items():
+            if bin_name not in df.columns:
+                continue
+
+            col = df[bin_name]
+            bin_mask = (col >= thresh['lower']) & (col <= thresh['upper'])
+            valid_mask &= bin_mask
+
+            failed = (~bin_mask & col.notna()).sum()
+            if failed > 0:
+                logger.debug(f"{bin_name}: {failed} values outside bootstrap 95% CI")
+
+        removed = (~valid_mask).sum()
+        logger.info(f"Bootstrap CI filtering removed {removed} rows "
+                   f"({removed/len(df)*100:.2f}% of data)")
+
+        return df[valid_mask].copy()
+
+    def process_xps_directory(self, xps_dir: Path, filter_type: str) -> Tuple[bool, str]:
         """
         Process a single XPS directory: load, filter, and save results.
         
@@ -248,12 +335,22 @@ class RadialProfileFilter:
                 logger.warning(f"No data remaining after NaN filtering in {xps_dir.name}")
                 return False, "No data after NaN filtering"
             
-            # Step 2: Calculate MAD thresholds
-            thresholds = self.calculate_mad_thresholds(df_filtered)
-            
-            # Step 3: Apply MAD filtering
-            df_final = self.filter_by_mad(df_filtered, thresholds)
-            final_count = len(df_final)
+            if filter_type == "MAD":
+                # Step 2: Calculate MAD thresholds
+                thresholds = self.calculate_mad_thresholds(df_filtered)
+                
+                # Step 3: Apply MAD filtering
+                df_final = self.filter_by_mad(df_filtered, thresholds)
+                final_count = len(df_final)
+            elif filter_type == "bootstrap":
+                # Step 2: Calculate bootstrap thresholds
+                thresholds = self.calculate_bootstrap_thresholds(df_filtered)
+                
+                # Step 3: Apply bootstrap filtering
+                df_final = self.filter_by_bootstrap_ci(df_filtered, thresholds)
+                final_count = len(df_final)
+            else:
+                print("unsupported method, the method should be -MAD- or -bootstrap-!")
             
             if final_count == 0:
                 logger.warning(f"No data remaining after MAD filtering in {xps_dir.name}")
@@ -276,10 +373,16 @@ class RadialProfileFilter:
             logger.error(f"Error processing {xps_dir.name}: {e}")
             return False, str(e)
     
-    def run_filtering(self) -> dict:
+    def run_filtering(self, filter_type: str) -> dict:
         """
         Run the filtering process on all XPS directories.
         
+        Parameters:
+        -----------
+        filter_type : str
+            MAD for mean absolute deviation   (4σ, 99.9%)
+            bootstrap for bootstrap filtering (95%CI)
+            
         Returns:
         --------
         Dictionary with processing results for each XPS directory
@@ -296,7 +399,7 @@ class RadialProfileFilter:
         # Process each XPS directory
         for xps_dir in xps_dirs:
             logger.info(f"Processing {xps_dir.name}...")
-            success, message = self.process_xps_directory(xps_dir)
+            success, message = self.process_xps_directory(xps_dir, filter_type)
             results[xps_dir.name] = {
                 'success': success,
                 'message': message,

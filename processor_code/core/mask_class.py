@@ -122,7 +122,9 @@ def precompute_center_masks(image_shape: Tuple[int, int] = (1024,1024), inner_ra
         RadialMasks: Precomputed radial masks object
     """
     height, width = image_shape
-    
+    MAX_POINTS_PER_MASK = 800
+    RING_NUM = 3
+
     # Create coordinate grids centered at image center
     y_coords, x_coords = np.mgrid[:height, :width]
     center_y = height // 2
@@ -134,7 +136,7 @@ def precompute_center_masks(image_shape: Tuple[int, int] = (1024,1024), inner_ra
     # Create masks for each radial bin
     masks = []
     bin_centers = []
-    radial_list = np.round(np.linspace(inner_radius,outer_radius,5)).astype(int).tolist()
+    radial_list = np.round(np.linspace(inner_radius,outer_radius,RING_NUM)).astype(int).tolist()
     
     for r in radial_list:
         # Create mask for pixels at distance r ± 0.5
@@ -142,6 +144,18 @@ def precompute_center_masks(image_shape: Tuple[int, int] = (1024,1024), inner_ra
         if np.any(mask):  # Only add mask if it contains pixels
             masks.append(mask)
             bin_centers.append(float(r))
+    
+    # Find all the pixel in the mask:
+    true_coords = np.argwhere(mask)
+    num_true = len(true_coords)
+    
+    # If more than MAX_POINTS, truncate by choose randomly to reduce computation cost
+    if num_true > MAX_POINTS_PER_MASK:
+        selected_idx = np.random.choice(num_true, size=MAX_POINTS_PER_MASK, replace=False)
+        selected_coords = true_coords[selected_idx]
+        # Only keep the remaining points
+        mask = np.zeros_like(mask)
+        mask[selected_coords[:, 0], selected_coords[:, 1]] = True
     
     return RadialMasks(
         bin_centers=np.array(bin_centers),

@@ -158,7 +158,7 @@ class DirectoryProcessor:
 
     def sort_file_into_xpsgroups(self) -> None:
         """
-        Sort files into XPS groups and (used to but no longer)merge similar groups.
+        Sort files into XPS groups and merge similar groups.
         """
         self.logger.info("Sorting files into XPS groups...")
         

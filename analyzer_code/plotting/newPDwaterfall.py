@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def plot_waterfall_diffraction(data: list, xps_0: float, pixel_to_q: float, scale: float, width_to_height_ratio: float, filename: str = 'waterfall_plot_final.png'):
+def plot_waterfall_diffraction(data: list, scale: float, width_to_height_ratio: float, filename: str = 'waterfall_plot_final.png'):
     """
     Generates the final customized waterfall plot of Percentage Difference (PD).
 
@@ -22,7 +22,7 @@ def plot_waterfall_diffraction(data: list, xps_0: float, pixel_to_q: float, scal
 
     # 1. Sort data by XPS value and Reverse Order (Biggest XPS at the bottom, i=0)
     # Sort descending by XPS, then reverse to have smallest XPS (earliest time) at i=0
-    sorted_data = sorted(data, key=lambda x: x[0], reverse=True)
+    sorted_data = sorted(data, key=lambda x: x[0])
     
     # 2. Identify and calculate Background (I_0) from the two largest XPS groups (now at the end)
     bg_group_1 = sorted_data[0] 
@@ -41,6 +41,8 @@ def plot_waterfall_diffraction(data: list, xps_0: float, pixel_to_q: float, scal
     # Define the constant vertical step in %PD for visual separation (e.g., 4% PD separation)
     vertical_step_PD = 1.0 * scale 
 
+    colors = plt.cm.gist_earth(np.linspace(0.05, 0.8, 8))
+
     # 4. Process and Plot Each Group
     num_curves = len(sorted_data)
     for i, group in enumerate(sorted_data):
@@ -52,31 +54,32 @@ def plot_waterfall_diffraction(data: list, xps_0: float, pixel_to_q: float, scal
         with np.errstate(divide='ignore', invalid='ignore'):
             PD = np.divide(I - I_0, I_0, out=np.zeros_like(I_0, dtype=float), where=I_0!=0) * 100
         
-        q = radial_distance * pixel_to_q
+        q = radial_distance
         
         # Vertical offset is proportional to the index 'i'
         vertical_offset = i * vertical_step_PD
         PD_curve = PD + vertical_offset
         
+        curve_color = colors[i % len(colors)]
         # Plot the curve
-        ax.plot(q, PD_curve, linewidth=1.5)
+        ax.plot(q, PD_curve, color=curve_color, linewidth=1.2)
 
         if has_std_dev := (len(group) > 3):
-            std_dev = np.array(group[3]) / I_0 * np.sqrt(2/2700) * 100  # Propagate std to PD
+            std_dev = np.array(group[3]) / I_0 * np.sqrt(2) * 100  # Propagate std to PD
             # Calculate upper and lower bounds for ±3σ (99.7% confidence)
-            upper_bound = PD + 3 * std_dev + vertical_offset
-            lower_bound = PD - 3 * std_dev + vertical_offset
+            upper_bound = PD + 2 * std_dev + vertical_offset
+            lower_bound = PD - 2 * std_dev + vertical_offset
             # Plot the shaded area for ±3σ
             ax.fill_between(
                 q,               
                 lower_bound,         
                 upper_bound,         
-                color = '#A23B72',   
-                alpha=0.05,           # transparency level
+                color="#9C8C9B",   
+                alpha=0.1,           # transparency level
             )
         
         # ALIGNMENT: Draw the horizontal baseline (PD=0) at the curve's offset position
-        ax.axhline(vertical_offset, color='gray', linestyle='--', linewidth=0.8, zorder=0)
+        #ax.axhline(vertical_offset, color='gray', linestyle='--', linewidth=0.8, zorder=0)
 
         time_tick_positions.append(vertical_offset)
 
@@ -101,7 +104,7 @@ def plot_waterfall_diffraction(data: list, xps_0: float, pixel_to_q: float, scal
     ax_time.set_ylim(ax.get_ylim()) 
 
     # Calculate time
-    time_labels = [f"{(xps_0 - group[0]) / 0.1499:.3f} ps" for group in sorted_data]
+    time_labels = [f"{group[0]:.3f} ps" for group in sorted_data]
     ax_time.set_yticks(time_tick_positions)
     ax_time.set_yticklabels(time_labels, fontsize=10, ha='left', va='center') # va='center' ensures perfect alignment with baseline
     ax_time.tick_params(axis='y', length=0)
@@ -135,7 +138,7 @@ def plot_waterfall_diffraction(data: list, xps_0: float, pixel_to_q: float, scal
     ax.set_xlabel('$q$ (Normalized Radial Distance)', fontsize=12)
     ax.set_ylabel('Percentage Difference ($\%PD$)', fontsize=12, loc='top')
     
-    ax.grid(False) # Turn off all default grid lines
+    ax.grid() # Turn off all default grid lines
     plt.tight_layout()
     plt.savefig(filename)
     plt.close(fig)
