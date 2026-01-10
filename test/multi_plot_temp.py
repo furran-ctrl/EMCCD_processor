@@ -37,34 +37,33 @@ for i in range(4):
         if idx < 2:
             corrected_data.append(data)
             continue
-        #corrected_intensity = data[1] - avg_bkg
-        #corrected_data.append((data[0], corrected_intensity, data[2]))
+        corrected_intensity = data[1] - avg_bkg
+        corrected_data.append((data[0], corrected_intensity, data[2]))
     merge_data.extend(corrected_data)
 #if the data[0] is closer than 0.01, we consider them as the same group and merge them
-
-# final_data = []
-# tolerance = 0.01
-# for i in range(1):
-#     xps_value = merge_data[i][0]
-#     merged_intensity = merge_data[i][1]
-#     merged_std = merge_data[i][2]
-#     count = 1
-#     for j in range(1, i):
-#         if abs(merge_data[j][0] - xps_value) < tolerance:
-#             merged_intensity += merge_data[j][1]
-#             #merged_std += merge_data[j][2]
-#             count += 1
-#             # Mark merged entry to avoid re-processing
-#             del merge_data[j] 
-#     merged_intensity /= count
-#     #merged_std /= count
-#     final_data.append((xps_value, merged_intensity, merged_std))
-# print(f"Total groups after merging: {len(final_data)}")
+sorted_data = sorted(merge_data, key=lambda x: x[0])
+final_data = []
+tolerance = 0.01
+i = 0
+while i < len(sorted_data):
+    current_xps = sorted_data[i][0]
+    merged_intensity = sorted_data[i][1].copy()
+    radial_distance = sorted_data[i][2]
+    count = 1
+    j = i + 1
+    while j < len(sorted_data) and abs(sorted_data[j][0] - current_xps) < tolerance:
+        merged_intensity += sorted_data[j][1]
+        count += 1
+        j += 1
+    merged_intensity /= count
+    final_data.append((current_xps, merged_intensity, radial_distance))
+    i = j
+print(f"Total groups after merging: {len(final_data)}")
 
 # Execute the function with the mock data
 plot_waterfall_diffraction(
-    data=merge_data, 
-    scale=10, 
-    width_to_height_ratio=0.8,
-    filename=r"C:\Users\ab177\Desktop\waterfall_plot_merge.png"
+    data=final_data, 
+    scale=0.1, 
+    width_to_height_ratio=0.4,
+    filename=r"C:\Users\ab177\Desktop\waterfall_plot_merge1.png"
 )

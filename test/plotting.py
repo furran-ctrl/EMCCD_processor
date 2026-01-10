@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Load the parquet file
-df = pd.read_parquet(r'C:\Users\ab177\Desktop\diffraction_results\1005night\analysis_parallel_time\xps_172.36000\filtered_xps_172.36000.parquet')
+df = pd.read_parquet(r'C:\Users\ab177\Desktop\diffraction_results\1005night\analysis_parallel_time\xps_173.18500\normalized_xps_173.18500.parquet')
 
 # Select the radial_bin columns you specified
 radial_columns = [f'radial_bin_{i:03d}' for i in range(50, 400, 30)]

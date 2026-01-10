@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # Load the parquet file
-df = pd.read_parquet(r'C:\Users\ab177\Desktop\diffraction_results\merged\water_scan\xps_172.35982\xps_172.35982.parquet')
+df = pd.read_parquet(r'C:\Users\ab177\Desktop\diffraction_results\1005night\analysis_parallel_time\xps_172.40461\normalized_xps_172.40461.parquet')
 
 # 1. 定义要绘制的radial_bin列名列表
 target_cols = ["radial_bin_050", "radial_bin_080", "radial_bin_120", 
