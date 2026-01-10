@@ -3,15 +3,19 @@ import os
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
+from pathlib import Path
 from scripts.full_directory_processor import DirectoryProcessor
+
+Expdata_folder = Path(r"E:\20251012\night3_longscan_uv63p4_IR37\fist_AndorEMCCD")
+Result_folder = Path(r"C:\Users\ab177\Desktop\diffraction_results\test")
 
 # Initialize DirectoryProcessor
 processor = DirectoryProcessor(
-    result_directory=r"C:\Users\ab177\Desktop\diffraction_results\1005day",
-    data_directory=r"E:\20251005\day2_61deg_longscan7\fist_AndorEMCCD",
-    xps_grouping_param=[250, 0.002],  # [threshold, tolerance]
+    result_directory=Result_folder,
+    data_directory=Expdata_folder,
+    xps_grouping_param=[600, 0.002],  # [threshold, tolerance]
     xray_removal_param=[15, 0.7],  # [beam_threshold, expansion_threshold_ratio]
-    center_fitting_param=[80, 180, 540, 495],  # [inner_radius, outer_radius, center_x, center_y]
+    center_fitting_param=[40, 120, 705, 727],  # [inner_radius, outer_radius, center_x, center_y]
     azimuthal_avg_param=[512, 512],  # [radius, num_bins]
     background_directory="default",
     data_mask_directory="default"
@@ -21,7 +25,7 @@ processor = DirectoryProcessor(
 #processor.process_in_sequence("analysis_in_sequence")
 
 # Or process in parallel
-processor.process_in_parallel(max_workers=8, analyze_no="analysis_parallel_longscan7")
+processor.process_in_parallel(max_workers=1, analyze_no="analysis_center_test")
 
 # Load existing configuration
 #processor.load_config("analysis_001")

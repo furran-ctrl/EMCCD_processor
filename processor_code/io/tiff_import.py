@@ -6,7 +6,7 @@ from typing import List
 from pathlib import Path
 #automatically handles path separators across different operating systems.
 
-def TiffLoader(directory: str, filename: str) -> np.ndarray:
+def load_as_tiff(directory: str, filename: str) -> np.ndarray:
     """
     Load a TIFF file from the specified directory and return as numpy ndarray.
     
@@ -41,7 +41,7 @@ def TiffLoader(directory: str, filename: str) -> np.ndarray:
     # Load and return the TIFF file
     return tifffile.imread(file_path)
 
-def TiffLoaderBatch(directory: str) -> List[np.ndarray]:
+def load_tiff_batch(directory: str) -> List[np.ndarray]:
     """
     Load all TIFF files from the specified directory and return as list of numpy ndarrays.
     

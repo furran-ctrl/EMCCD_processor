@@ -24,19 +24,15 @@ def plot_azimuthal_average(radii, intensities) -> None:
         """
         Plot the azimuthal average.
         """
-        try:
-            import matplotlib.pyplot as plt
-            
-            plt.figure(figsize=(10, 6))
-            plt.plot(radii, intensities, 'b-', linewidth=2, label='Azimuthal Average')
-            
-            plt.xlabel('Radial Distance (pixels)')
-            plt.ylabel('Average Intensity')
-            plt.title('Azimuthal Average Profile')
-            plt.grid(True, alpha=0.3)
-            plt.legend()
-            plt.tight_layout()
-            plt.show(block=False)
-            
-        except ImportError:
-            print("Matplotlib not available for plotting")
+        import matplotlib.pyplot as plt
+        
+        plt.figure(figsize=(10, 6))
+        plt.plot(radii, intensities, 'b-', linewidth=2, label='Azimuthal Average')
+        
+        plt.xlabel('Radial Distance (pixels)')
+        plt.ylabel('Average Intensity')
+        plt.title('Azimuthal Average Profile')
+        plt.grid(True, alpha=0.3)
+        plt.legend()
+        plt.tight_layout()
+        plt.show()

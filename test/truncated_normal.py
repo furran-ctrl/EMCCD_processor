@@ -61,7 +61,7 @@ def plot_truncated_sem_with_variable1_n(max_k, n_original=1000):
 
 #plot_truncated_sem_with_variable_n(3)
 
-def plot_truncated_sem_with_variable_n(max_k, n_original=100000):
+def plot_truncated_sem_with_variable_n(max_k, n_original=1000):
     """
     Plots the SEM of a truncated normal distribution as a function of k-sigma,
     correctly accounting for the reduction in sample size (n) due to truncation.
@@ -122,4 +122,4 @@ def plot_truncated_sem_with_variable_n(max_k, n_original=100000):
     plt.show()
 
 # Execute the function with a large N to better approximate the theoretical values
-plot_truncated_sem_with_variable_n(max_k=1.5, n_original=100000)
+plot_truncated_sem_with_variable_n(max_k=4, n_original=1000)

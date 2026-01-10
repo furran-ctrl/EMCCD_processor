@@ -4,13 +4,13 @@ import numpy as np  # 用于计算密度
 import pandas as pd
 
 # Load the parquet file
-df = pd.read_parquet(r'C:\Users\ab177\Desktop\diffraction_results\1005night\analysis_parallel_time\xps_173.18500\normalized_xps_173.18500.parquet')
+df = pd.read_parquet(r'C:\Users\ab177\Desktop\diffraction_results\1012long\analysis_parallel_time\xps_198.06666\normalized_xps_198.06666.parquet')
 # 设置绘图风格
 sns.set_style("whitegrid")
 
 # 1. 准备数据
-x = df["radial_bin_050"]
-y = df["radial_bin_450"]
+x = df["center_y"]
+y = df["radial_bin_200"]
 
 # 2. 计算点的局部密度（核心：用高斯核估计密度）
 from scipy.stats import gaussian_kde

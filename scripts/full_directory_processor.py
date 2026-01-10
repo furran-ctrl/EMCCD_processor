@@ -10,7 +10,7 @@ import json
 
 from processor_code.core.processor_objects import XPSGroupProcessor
 from processor_code.io.xps_value_sort import group_tiff_files_with_info, merge_xps_groups_manual, merge_xps_groups_strategy
-from processor_code.io.tiff_import import TiffLoader
+from processor_code.io.tiff_import import load_as_tiff
 from processor_code.core.mask_class import precompute_ring_mask, precompute_radial_masks, precompute_azimuthal_average_masks, precompute_center_masks
 from processor_code.core.processing_utils import ProcessingConfig
 
@@ -109,7 +109,7 @@ class DirectoryProcessor:
             if not background_path.exists():
                 raise FileNotFoundError(f"Default background file not found under: {background_path}")
             
-            self.background_data = TiffLoader(background_path.parent, background_path.name)
+            self.background_data = load_as_tiff(background_path.parent, background_path.name)
             self.logger.info(f"Loaded background from: {background_path}")
         
         else:
@@ -122,7 +122,7 @@ class DirectoryProcessor:
             
             # Use the first TIFF file found
             background_file = tiff_files[0]
-            self.background_data = TiffLoader(background_file.parent, background_file.name)
+            self.background_data = load_as_tiff(background_file.parent, background_file.name)
             self.logger.info(f"Loaded background from: {background_file}")
 
         if self.data_mask_directory == 'default':
@@ -136,8 +136,8 @@ class DirectoryProcessor:
                 background_mask[:, 20:1024-20] = 1
                 self.data_mask_data = [np.ones((1024, 1024), dtype=int),background_mask] 
             else:
-                self.data_mask_data = [TiffLoader(data_mask_path.parent, data_mask_path.name),
-                                       TiffLoader(background_mask_path.parent, background_mask_path.name)]
+                self.data_mask_data = [load_as_tiff(data_mask_path.parent, data_mask_path.name),
+                                       load_as_tiff(background_mask_path.parent, background_mask_path.name)]
                 self.logger.info(f"Loaded data_mask from: {self.result_directory}")
         
         else:
@@ -153,7 +153,7 @@ class DirectoryProcessor:
             else:
                 #needs fixing!
                 data_mask_file = tiff_files[0]
-                self.data_mask_data = TiffLoader(data_mask_file.parent, data_mask_file.name)
+                self.data_mask_data = load_as_tiff(data_mask_file.parent, data_mask_file.name)
                 self.logger.info(f"Loaded data_mask from: {data_mask_file}")
 
     def sort_file_into_xpsgroups(self) -> None:

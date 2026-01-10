@@ -6,7 +6,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 from processor_code.io.quick_plot import plot_ndarray
-from processor_code.io.tiff_import import TiffLoader
+from processor_code.io.tiff_import import load_as_tiff
 import pandas as pd
 import numpy as np
 
@@ -29,14 +29,14 @@ def plot_averaged_tiffs(parquet_path, row_indices, tiff_directory):
     # Load all TIFF files and store them in a list
     arrays = []
     for filename in filenames:
-        array = TiffLoader(tiff_directory, filename)
+        array = load_as_tiff(tiff_directory, filename)
         arrays.append(array)
     
     # Calculate the mean of all arrays
     averaged_array = np.mean(arrays, axis=0)
 
     # load background file
-    bkg_array = TiffLoader(r"C:\Users\86177\Desktop\streaking","background.tiff")
+    bkg_array = load_as_tiff(r"C:\Users\86177\Desktop\streaking","background.tiff")
     mean_array = averaged_array - bkg_array
 
     # Plot the averaged array

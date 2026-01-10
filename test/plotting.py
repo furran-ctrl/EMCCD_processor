@@ -4,10 +4,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Load the parquet file
-df = pd.read_parquet(r'C:\Users\ab177\Desktop\diffraction_results\1005night\analysis_parallel_time\xps_173.18500\normalized_xps_173.18500.parquet')
+df = pd.read_parquet(r'C:\Users\ab177\Desktop\diffraction_results\1012long\analysis_parallel_time\xps_198.06666\normalized_xps_198.06666.parquet')
 
 # Select the radial_bin columns you specified
-radial_columns = [f'radial_bin_{i:03d}' for i in range(50, 400, 30)]
+radial_columns = [f'radial_bin_{i:03d}' for i in range(50, 400, 15)]
 
 # Filter only columns that exist in the dataframe
 available_columns = [col for col in radial_columns if col in df.columns]

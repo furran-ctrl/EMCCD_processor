@@ -710,20 +710,27 @@ class EMCCDimage:
         #     center_x, center_y = center_params
         #     return self.calculate_std_sum_with_masks(radial_masks, (center_x, center_y))
         
-        # Set bounds for optimization (±5 pixels around initial guess)
-        guess_x, guess_y = initial_guess
+        # Set initial_simplex for faster optimization (+8 vs default 5% pixel around initial guess)
+        delta = 2.0
+        x0 = np.array([initial_guess[0], initial_guess[1]])
         
+        initial_simplex = np.array([
+            x0,
+            x0 + [delta, 0],
+            x0 + [0, delta],
+        ])
+
         # Perform optimization
         result = minimize(
             fun=self.calculate_std_sum_with_masks,
-            x0=[guess_x, guess_y],
+            x0=x0,
             args=(radial_masks,),
             method='Nelder-Mead', 
             options={
+                'disp': True,
+                'initial_simplex': initial_simplex,
                 'maxiter': max_iter,
-                'disp': False,
                 'xatol': 1,  # Coordinate tolerance
-                'yatol': 1,
             }
         )
         

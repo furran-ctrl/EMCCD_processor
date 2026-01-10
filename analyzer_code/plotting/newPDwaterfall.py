@@ -52,7 +52,7 @@ def plot_waterfall_diffraction(data: list, scale: float, width_to_height_ratio: 
 
         # Calculate PD
         with np.errstate(divide='ignore', invalid='ignore'):
-            PD = np.divide(I , I_0, out=np.zeros_like(I_0, dtype=float), where=I_0!=0) * 100
+            PD = np.divide(I - I_0, I_0, out=np.zeros_like(I_0, dtype=float), where=I_0!=0) * 100
         
         q = radial_distance
         

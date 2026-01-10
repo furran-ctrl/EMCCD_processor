@@ -4,9 +4,10 @@ from pathlib import Path
 import time
 from typing import List, Tuple, Dict, Optional
 import logging
+import random
 
 from processor_code.core.tiff_objects import EMCCDimage
-from processor_code.io.tiff_import import TiffLoader
+from processor_code.io.tiff_import import load_as_tiff
 from processor_code.utils.timer import timer
 from processor_code.io.quick_plot import plot_azimuthal_average, plot_ndarray
 from processor_code.core.processing_utils import ProcessedResult, HDF5DataStore
@@ -76,7 +77,6 @@ class XPSGroupProcessor:
             self.logger.info(f"Using all {len(sample_files)} files for X-ray statistics precomputation")
         else:
             # Randomly sample files
-            import random
             sample_files = random.sample(self.filelist, sample_size)
             self.logger.info(f"Randomly sampled {len(sample_files)} files for X-ray statistics precomputation")
         
@@ -88,7 +88,7 @@ class XPSGroupProcessor:
                 #self.logger.info(f"Processing sample {i+1}/{len(sample_files)}: {Path(filepath).name}")
                 
                 # Load image
-                image = EMCCDimage(TiffLoader(Path(filepath).parent, Path(filepath).name))
+                image = EMCCDimage(load_as_tiff(Path(filepath).parent, Path(filepath).name))
                 
                 # Remove only background, no Xray filter 
                 image.remove_background_legacy(
@@ -156,7 +156,7 @@ class XPSGroupProcessor:
             #self.logger.info(f"Processing: {Path(filepath).name}")
             
             # Load image file
-            image_file = EMCCDimage(TiffLoader(Path(filepath).parent, Path(filepath).name))
+            image_file = EMCCDimage(load_as_tiff(Path(filepath).parent, Path(filepath).name))
 
             # Remove background
             #with timer('bkg_removal'):
@@ -225,7 +225,7 @@ class XPSGroupProcessor:
             print(f"{'='*60}")
             
             # Load image file
-            image_file = EMCCDimage(TiffLoader(Path(filepath).parent, Path(filepath).name))
+            image_file = EMCCDimage(load_as_tiff(Path(filepath).parent, Path(filepath).name))
             
             # Plot original data before background removal
             print(f"\n1. ORIGINAL DATA:")
@@ -345,7 +345,7 @@ class XPSGroupProcessor:
         all_processed_data = []
         for i, filepath in enumerate(self.filelist):
             # Load and process image
-            image_file = EMCCDimage(TiffLoader(Path(filepath).parent, Path(filepath).name))
+            image_file = EMCCDimage(load_as_tiff(Path(filepath).parent, Path(filepath).name))
             image_file.remove_background(
                 self.background_data,
                 self.X_ray_precompute[0],

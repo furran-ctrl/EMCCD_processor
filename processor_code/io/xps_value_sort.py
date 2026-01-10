@@ -65,7 +65,6 @@ def group_tiff_files_by_xps(directory: str) -> List[List[str]]:
     
     return sorted_groups
 
-
 def extract_xps_value(filename: str) -> float:
     """
     Extract XPS value from filename.
@@ -83,7 +82,6 @@ def extract_xps_value(filename: str) -> float:
     if match:
         return float(match.group(1))
     return None
-
 
 def group_tiff_files_with_info(directory: str) -> List[Tuple[float, List[str]]]:
     """
@@ -115,7 +113,6 @@ def group_tiff_files_with_info(directory: str) -> List[Tuple[float, List[str]]]:
     
     return sorted_groups
 
-
 def print_group_summary(groups: List[List[str]]):
     """
     Print summary information about the grouped files.
@@ -141,7 +138,6 @@ def print_group_summary(groups: List[List[str]]):
         
         if i < len(groups) - 1:  # Don't print separator after last group
             print("-" * 50)
-
 
 # Alternative version using the tuple format
 def print_detailed_summary(groups_with_xps: List[Tuple[float, List[str]]]):
